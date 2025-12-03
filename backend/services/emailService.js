@@ -1,0 +1,218 @@
+const nodemailer = require('nodemailer');
+const { pool } = require('../config/database');
+
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: String(process.env.EMAIL_SECURE || 'false') === 'true',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+};
+
+// Template email per notifiche scadenze
+const createExpiryNotificationEmail = (user, vehicle, notification) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(notification.expiry_date);
+  expiry.setHours(0, 0, 0, 0);
+  const deltaDays = Math.round((expiry.getTime() - today.getTime()) / 86400000);
+  const subject = deltaDays < 0
+    ? `⏰ Scadenza scaduta: ${notification.message}`
+    : `⚠️ Scadenza imminente: ${notification.message}`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${subject}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">🚗 A Bordo - Notifica Scadenza</h1>
+      </div>
+      
+      <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 10px 10px;">
+        <h2 style="color: #dc2626; margin-bottom: 20px;">⚠️ Scadenza Imminente</h2>
+        
+        <p style="font-size: 16px; margin-bottom: 20px;">Ciao <strong>${user.first_name},</strong></p>
+        
+        <p style="margin-bottom: 20px;">ti informiamo che sta per avvicinarsi un'importante scadenza per il tuo veicolo:</p>
+        
+        <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h3 style="margin: 0 0 15px 0; color: #1f2937;">📋 Dettagli Veicolo</h3>
+          <p style="margin: 5px 0;"><strong>Targa:</strong> ${vehicle.plate_number}</p>
+          <p style="margin: 5px 0;"><strong>Marca/Modello:</strong> ${vehicle.brand} ${vehicle.model}</p>
+          <p style="margin: 5px 0;"><strong>Anno:</strong> ${vehicle.year}</p>
+        </div>
+        
+        <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin-bottom: 20px;">
+          <h3 style="margin: 0 0 15px 0; color: #dc2626;">📅 Dettagli Scadenza</h3>
+          <p style="margin: 5px 0;"><strong>Tipo:</strong> ${getNotificationTypeLabel(notification.type)}</p>
+          <p style="margin: 5px 0;"><strong>Descrizione:</strong> ${notification.message}</p>
+          <p style="margin: 5px 0;"><strong>Data di scadenza:</strong> ${formatDate(notification.expiry_date)}</p>
+          ${deltaDays >= 0
+            ? `<p style="margin: 5px 0;"><strong>Giorni rimanenti:</strong> ${deltaDays}</p>`
+            : `<p style="margin: 5px 0; color: #b91c1c;"><strong>Scaduto da:</strong> ${Math.abs(deltaDays)} giorni</p>`}
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}" 
+             style="background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+            Vai alla Dashboard
+          </a>
+        </div>
+        
+        <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+          Ricevi questa email perché hai attivato le notifiche per le scadenze dei tuoi veicoli su A Bordo.
+          <br>
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/settings" style="color: #3b82f6;">Gestisci le tue preferenze</a>
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return {
+    from: `"A Bordo" <${process.env.EMAIL_USER}>`,
+    to: user.email,
+    subject,
+    html
+  };
+};
+
+// Funzioni di utilità
+const getNotificationTypeLabel = (type) => {
+  const labels = {
+    'insurance': 'Assicurazione',
+    'tax': 'Bollo Auto',
+    'inspection': 'Revisione',
+    'service': 'Tagliando',
+    'maintenance': 'Manutenzione'
+  };
+  return labels[type] || type;
+};
+
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+};
+
+// Invia email di notifica
+const sendExpiryNotification = async (user, vehicle, notification) => {
+  try {
+    const transporter = createTransporter();
+    const mailOptions = createExpiryNotificationEmail(user, vehicle, notification);
+    
+    const result = await transporter.sendMail(mailOptions);
+    
+    // Log dell'email inviata
+    await pool.query(
+      `INSERT INTO email_logs (user_id, notification_id, email_type, recipient_email, status) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [user.id, notification.id, 'expiry_notification', user.email, 'sent']
+    );
+    
+    // Aggiorna la notifica come email inviata
+    await pool.query(
+      'UPDATE notifications SET email_sent = true WHERE id = $1',
+      [notification.id]
+    );
+    
+    console.log(`✅ Email inviata a ${user.email} per notifica ${notification.id}`);
+    return result;
+  } catch (error) {
+    console.error(`❌ Errore nell'invio email a ${user.email}:`, error);
+    
+    // Log dell'errore
+    await pool.query(
+      `INSERT INTO email_logs (user_id, notification_id, email_type, recipient_email, status, error_message) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [user.id, notification.id, 'expiry_notification', user.email, 'failed', error.message]
+    );
+    
+    throw error;
+  }
+};
+
+// Controlla e invia notifiche per scadenze imminenti
+const checkAndSendNotifications = async () => {
+  try {
+    // Trova tutte le notifiche non ancora inviate per email che stanno per scadere
+    const result = await pool.query(`
+      SELECT 
+        n.id AS notification_id,
+        n.type AS notification_type,
+        n.status AS notification_status,
+        n.days_until_expiry AS notification_days_until_expiry,
+        n.message AS notification_message,
+        n.expiry_date AS notification_expiry_date,
+        n.email_sent AS notification_email_sent,
+        v.id AS vehicle_id,
+        v.plate_number, v.brand, v.model, v.year,
+        u.id AS user_id,
+        u.email, u.first_name, u.last_name, u.email_notifications
+      FROM notifications n
+      JOIN vehicles v ON n.vehicle_id = v.id
+      JOIN users u ON v.user_id = u.id
+      WHERE n.email_sent = false 
+        AND u.email_notifications = true
+        AND (
+          (n.expiry_date::date - CURRENT_DATE) <= 30
+        )
+        AND NOT (
+          n.status = 'safe' AND n.updated_at > n.created_at
+        )
+      ORDER BY (n.expiry_date::date - CURRENT_DATE) ASC
+    `);
+    
+    for (const row of result.rows) {
+      try {
+        const user = {
+          id: row.user_id,
+          email: row.email,
+          first_name: row.first_name,
+          last_name: row.last_name
+        };
+        const vehicle = {
+          id: row.vehicle_id,
+          plate_number: row.plate_number,
+          brand: row.brand,
+          model: row.model,
+          year: row.year
+        };
+        const notification = {
+          id: row.notification_id,
+          type: row.notification_type,
+          status: row.notification_status,
+          days_until_expiry: row.notification_days_until_expiry,
+          message: row.notification_message,
+          expiry_date: row.notification_expiry_date,
+          email_sent: row.notification_email_sent
+        };
+
+        await sendExpiryNotification(user, vehicle, notification);
+      } catch (error) {
+        console.error(`Errore nell'invio notifica per veicolo ${row.vehicle_id}:`, error);
+      }
+    }
+    
+    console.log(`✅ Processate ${result.rows.length} notifiche email`);
+  } catch (error) {
+    console.error('❌ Errore nel controllo notifiche:', error);
+  }
+};
+
+module.exports = {
+  sendExpiryNotification,
+  checkAndSendNotifications,
+  createTransporter
+};
