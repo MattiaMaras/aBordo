@@ -18,6 +18,10 @@ if (String(process.env.DB_MOCK || 'false') === 'true') {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: Number(process.env.PG_POOL_MAX || 10),
+    idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT || 30000),
+    connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT || 5000),
+    keepAlive: true,
   });
 }
 

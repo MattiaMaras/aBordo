@@ -45,7 +45,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Hash della password
-    const saltRounds = 12;
+    const saltRounds = Number(process.env.BCRYPT_COST || 10);
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Inserimento nuovo utente

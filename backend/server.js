@@ -175,7 +175,11 @@ const startServer = async () => {
       console.log('✅ Database connesso con successo');
       
       // Crea tabelle se non esistono
-      await createTables();
+      if (String(process.env.RUN_DB_MIGRATIONS || 'false') === 'true') {
+        await createTables();
+      } else {
+        console.log('⏭️  Migrazioni DB saltate all\'avvio (RUN_DB_MIGRATIONS!=true)');
+      }
     } catch (dbError) {
       console.log('⚠️  Database non disponibile, uso modalità test');
       console.log('📝 Le API funzioneranno ma i dati non saranno persistenti');
