@@ -53,6 +53,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 // Gestione esplicita delle richieste preflight
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 const isProduction = process.env.NODE_ENV === 'production';

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# Blocco eventuali cartelle non rilevanti (none per ora)
+
+Sitemap: https://a-bordo.vercel.app/sitemap.xml

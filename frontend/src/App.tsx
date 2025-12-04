@@ -3,6 +3,8 @@ import { useLocation, useNavigate, Routes, Route } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LandingPage } from './components/landing/LandingPage';
+import PrivacyPage from './components/legal/PrivacyPage';
+import TermsPage from './components/legal/TermsPage';
 import { Header } from './components/layout/Header';
 import { StatsGrid } from './components/dashboard/StatsGrid';
 import { NotificationCenter } from './components/dashboard/NotificationCenter';
@@ -461,13 +463,23 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated) return <LandingPage />;
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+      </Routes>
+    );
+  }
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
       <Route path="/deadlines" element={<Dashboard />} />
       <Route path="/costs" element={<Dashboard />} />
       <Route path="/history" element={<Dashboard />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
     </Routes>
   );
 };
