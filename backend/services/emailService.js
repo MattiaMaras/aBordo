@@ -53,9 +53,15 @@ const createExpiryNotificationEmail = (user, vehicle, notification) => {
   const expiry = new Date(notification.expiry_date);
   expiry.setHours(0, 0, 0, 0);
   const deltaDays = Math.round((expiry.getTime() - today.getTime()) / 86400000);
+  // Rimuove eventuale suffisso "tra X giorni" dal messaggio salvato, così il testo resta coerente
+  // con il calcolo odierno dei giorni rimanenti.
+  const baseMessage = String(notification.message || '')
+    .replace(/\s+tra\s+\d+\s+giorni\s*$/i, '')
+    .replace(/\s*scadut[oa]\s*$/i, '')
+    .trim();
   const subject = deltaDays < 0
-    ? `⏰ Scadenza scaduta: ${notification.message}`
-    : `⚠️ Scadenza imminente: ${notification.message}`;
+    ? `⏰ Scadenza scaduta: ${baseMessage || notification.message || getNotificationTypeLabel(notification.type)}`
+    : `⚠️ Scadenza imminente: ${baseMessage || notification.message || getNotificationTypeLabel(notification.type)}`;
   
   const html = `
     <!DOCTYPE html>
@@ -87,7 +93,7 @@ const createExpiryNotificationEmail = (user, vehicle, notification) => {
         <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin-bottom: 20px;">
           <h3 style="margin: 0 0 15px 0; color: #dc2626;">📅 Dettagli Scadenza</h3>
           <p style="margin: 5px 0;"><strong>Tipo:</strong> ${getNotificationTypeLabel(notification.type)}</p>
-          <p style="margin: 5px 0;"><strong>Descrizione:</strong> ${notification.message}</p>
+          <p style="margin: 5px 0;"><strong>Descrizione:</strong> ${baseMessage || notification.message}</p>
           <p style="margin: 5px 0;"><strong>Data di scadenza:</strong> ${formatDate(notification.expiry_date)}</p>
           ${deltaDays >= 0
             ? `<p style="margin: 5px 0;"><strong>Giorni rimanenti:</strong> ${deltaDays}</p>`
