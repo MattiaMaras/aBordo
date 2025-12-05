@@ -10,7 +10,8 @@ const vehicleRoutes = require('./routes/vehicles');
 const notificationRoutes = require('./routes/notifications');
 const costsRoutes = require('./routes/costs');
 const { authenticateToken } = require('./middleware/auth');
-const { checkAndSendNotifications } = require('./services/emailService');
+const { checkAndSendNotifications, verifyTransporter } = require('./services/emailService');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -114,25 +115,25 @@ app.get('/api/protected', authenticateToken, (req, res) => {
   });
 });
 
-// Cron job per notifiche email (ogni giorno alle 8:00)
-const scheduleNotifications = () => {
-  const now = new Date();
-  const scheduledTime = new Date();
-  scheduledTime.setHours(8, 0, 0, 0);
-  
-  if (now > scheduledTime) {
-    scheduledTime.setDate(scheduledTime.getDate() + 1);
+// Schedulazione: esegue subito all'avvio e poi ogni giorno alle 08:00 Europe/Rome.
+let lastEmailJobDay = null;
+const runEmailNotifications = async () => {
+  try {
+    await checkAndSendNotifications();
+    lastEmailJobDay = new Date().toDateString();
+  } catch (err) {
+    console.error('❌ Errore job email notifiche:', err);
   }
-  
-  const timeUntilNotification = scheduledTime - now;
-  
-  setTimeout(() => {
-    checkAndSendNotifications();
-    // Ripeti ogni 24 ore
-    setInterval(checkAndSendNotifications, 24 * 60 * 60 * 1000);
-  }, timeUntilNotification);
-  
-  console.log(`📅 Notifiche email programmate per le ${scheduledTime.toLocaleTimeString()}`);
+};
+
+const scheduleNotifications = () => {
+  // Esecuzione immediata all'avvio
+  runEmailNotifications();
+  // Cron giornaliero alle 08:00 ora italiana
+  cron.schedule('0 8 * * *', async () => {
+    await runEmailNotifications();
+  }, { timezone: 'Europe/Rome' });
+  console.log('📅 Job email schedulato: 08:00 Europe/Rome (cron)');
 };
 
 // Error handling middleware
@@ -193,7 +194,10 @@ const startServer = async () => {
       
       // Programma notifiche email (solo se email è configurata)
       if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        scheduleNotifications();
+        // Verifica SMTP una volta all'avvio per segnalare eventuali problemi di configurazione
+        verifyTransporter().finally(() => {
+          scheduleNotifications();
+        });
       } else {
         console.log('📧 Notifiche email non configurate');
       }

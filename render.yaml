@@ -28,3 +28,5 @@ services:
         value: 12
       - key: JWT_EXPIRES_IN
         value: 7d
+      - key: TZ
+        value: Europe/Rome

@@ -191,6 +191,13 @@ const createTables = async () => {
       // Ignora errori non critici
     }
 
+    // Aggiungi colonna per lo stadio di invio email (warning/critical/final)
+    try {
+      await pool.query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS email_stage VARCHAR(20)`);
+    } catch (e) {
+      // Ignora errori non critici
+    }
+
     // Tabella email inviate (per tracciare le notifiche email)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS email_logs (
@@ -204,6 +211,13 @@ const createTables = async () => {
         error_message TEXT
       )
     `);
+
+    // Aggiungi colonna per tracciare lo stadio dell'email inviata
+    try {
+      await pool.query(`ALTER TABLE email_logs ADD COLUMN IF NOT EXISTS email_stage VARCHAR(20)`);
+    } catch (e) {
+      // Ignora errori non critici
+    }
 
     // Creazione indici per performance
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vehicles_user_id ON vehicles(user_id)`);

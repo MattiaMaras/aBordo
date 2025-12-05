@@ -358,6 +358,7 @@ router.post('/send-emails', async (req, res) => {
         n.message AS notification_message,
         n.expiry_date AS notification_expiry_date,
         n.email_sent AS notification_email_sent,
+        n.email_stage AS notification_email_stage,
         v.id AS vehicle_id,
         v.plate_number, v.brand, v.model, v.year,
         u.id AS user_id,
@@ -366,7 +367,6 @@ router.post('/send-emails', async (req, res) => {
       JOIN vehicles v ON n.vehicle_id = v.id
       JOIN users u ON v.user_id = u.id
       WHERE v.user_id = $1
-        AND n.email_sent = false
         AND u.email_notifications = true
         AND (
           (n.expiry_date::date - CURRENT_DATE) <= 30
@@ -405,7 +405,18 @@ router.post('/send-emails', async (req, res) => {
           email_sent: row.notification_email_sent
         };
 
-        await sendExpiryNotification(user, vehicle, notification);
+        // Calcola giorni e stadio corrente
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expiry = new Date(notification.expiry_date);
+        expiry.setHours(0, 0, 0, 0);
+        const deltaDays = Math.round((expiry.getTime() - today.getTime()) / 86400000);
+        const stage = (deltaDays <= 0) ? 'final' : (deltaDays <= 7) ? 'critical' : (deltaDays <= 30) ? 'warning' : null;
+
+        if (!stage) continue;
+        if (row.notification_email_stage === stage) continue;
+
+        await sendExpiryNotification(user, vehicle, notification, stage);
         sentCount++;
       } catch (err) {
         errors.push({ notificationId: row.notification_id, message: err?.message || String(err) });

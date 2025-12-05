@@ -106,8 +106,16 @@ const formatDate = (dateString) => {
   });
 };
 
-// Invia email di notifica
-const sendExpiryNotification = async (user, vehicle, notification) => {
+// Determina lo stadio di invio in base ai giorni
+const computeStageFromDays = (deltaDays) => {
+  if (deltaDays <= 0) return 'final';
+  if (deltaDays <= 7) return 'critical';
+  if (deltaDays <= 30) return 'warning';
+  return null;
+};
+
+// Invia email di notifica con stadio
+const sendExpiryNotification = async (user, vehicle, notification, stage) => {
   try {
     const transporter = createTransporter();
     const mailOptions = createExpiryNotificationEmail(user, vehicle, notification);
@@ -116,15 +124,15 @@ const sendExpiryNotification = async (user, vehicle, notification) => {
     
     // Log dell'email inviata
     await pool.query(
-      `INSERT INTO email_logs (user_id, notification_id, email_type, recipient_email, status) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      [user.id, notification.id, 'expiry_notification', user.email, 'sent']
+      `INSERT INTO email_logs (user_id, notification_id, email_type, recipient_email, status, email_stage) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [user.id, notification.id, 'expiry_notification', user.email, 'sent', stage]
     );
     
-    // Aggiorna la notifica come email inviata
+    // Aggiorna la notifica come email inviata per questo stadio
     await pool.query(
-      'UPDATE notifications SET email_sent = true WHERE id = $1',
-      [notification.id]
+      'UPDATE notifications SET email_sent = true, email_stage = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [notification.id, stage]
     );
     
     console.log(`✅ Email inviata a ${user.email} per notifica ${notification.id}`);
@@ -134,9 +142,9 @@ const sendExpiryNotification = async (user, vehicle, notification) => {
     
     // Log dell'errore
     await pool.query(
-      `INSERT INTO email_logs (user_id, notification_id, email_type, recipient_email, status, error_message) 
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [user.id, notification.id, 'expiry_notification', user.email, 'failed', error.message]
+      `INSERT INTO email_logs (user_id, notification_id, email_type, recipient_email, status, error_message, email_stage) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, notification.id, 'expiry_notification', user.email, 'failed', error.message, stage]
     );
     
     throw error;
@@ -156,6 +164,7 @@ const checkAndSendNotifications = async () => {
         n.message AS notification_message,
         n.expiry_date AS notification_expiry_date,
         n.email_sent AS notification_email_sent,
+        n.email_stage AS notification_email_stage,
         v.id AS vehicle_id,
         v.plate_number, v.brand, v.model, v.year,
         u.id AS user_id,
@@ -163,8 +172,7 @@ const checkAndSendNotifications = async () => {
       FROM notifications n
       JOIN vehicles v ON n.vehicle_id = v.id
       JOIN users u ON v.user_id = u.id
-      WHERE n.email_sent = false 
-        AND u.email_notifications = true
+      WHERE u.email_notifications = true
         AND (
           (n.expiry_date::date - CURRENT_DATE) <= 30
         )
@@ -199,7 +207,19 @@ const checkAndSendNotifications = async () => {
           email_sent: row.notification_email_sent
         };
 
-        await sendExpiryNotification(user, vehicle, notification);
+        // Calcola giorni e stadio corrente
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expiry = new Date(notification.expiry_date);
+        expiry.setHours(0, 0, 0, 0);
+        const deltaDays = Math.round((expiry.getTime() - today.getTime()) / 86400000);
+        const stage = computeStageFromDays(deltaDays);
+
+        // Se fuori soglia o stadio già inviato, salta
+        if (!stage) continue;
+        if (row.notification_email_stage === stage) continue;
+
+        await sendExpiryNotification(user, vehicle, notification, stage);
       } catch (error) {
         console.error(`Errore nell'invio notifica per veicolo ${row.vehicle_id}:`, error);
       }
@@ -214,5 +234,15 @@ const checkAndSendNotifications = async () => {
 module.exports = {
   sendExpiryNotification,
   checkAndSendNotifications,
-  createTransporter
+  createTransporter,
+  // Verifica la configurazione SMTP all'avvio per diagnosticare errori (DNS/credenziali/porta)
+  verifyTransporter: async () => {
+    try {
+      const transporter = createTransporter();
+      await transporter.verify();
+      console.log('📧 SMTP transporter verificato: connessione pronta');
+    } catch (err) {
+      console.error('❌ Verifica SMTP fallita:', err?.message || err);
+    }
+  }
 };

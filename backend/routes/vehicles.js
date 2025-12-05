@@ -348,8 +348,13 @@ const createInitialNotifications = async (vehicleId) => {
 
 // Helpers per aggiornare le notifiche in base alle scadenze
 const computeStatusForExpiryDate = (expiryDate) => {
-  const date = new Date(expiryDate);
-  const days = Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  // Allinea il calcolo ai valori usati in SQL e nelle email:
+  // confronto tra le DATE (a mezzanotte) per evitare off‑by‑one dovuti all'orario corrente.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(expiryDate);
+  expiry.setHours(0, 0, 0, 0);
+  const days = Math.round((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   let status = 'safe';
   if (days < 0) status = 'expired';
   else if (days <= 7) status = 'critical';
