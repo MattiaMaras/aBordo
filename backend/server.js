@@ -1,4 +1,5 @@
 const express = require('express');
+const dns = require('dns');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -18,6 +19,16 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware di sicurezza
 app.use(helmet());
+
+// Preferisci IPv4 nelle risoluzioni DNS per evitare timeouts su IPv6
+try {
+  if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+    console.log('🌐 DNS result order impostato a ipv4first');
+  }
+} catch (e) {
+  console.log('⚠️ Impossibile impostare DNS result order:', e?.message || e);
+}
 
 // CORS configuration
 const corsOptions = {

@@ -1,4 +1,6 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+const { promises: dnsPromises } = dns;
 const { pool } = require('../config/database');
 
 const createTransporter = () => {
@@ -9,7 +11,10 @@ const createTransporter = () => {
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
-    }
+    },
+    // Timeout espliciti per diagnosticare problemi di rete più rapidamente
+    connectionTimeout: 10000,
+    socketTimeout: 10000,
   });
 };
 
@@ -238,6 +243,24 @@ module.exports = {
   // Verifica la configurazione SMTP all'avvio per diagnosticare errori (DNS/credenziali/porta)
   verifyTransporter: async () => {
     try {
+      const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+      const port = Number(process.env.EMAIL_PORT || 587);
+      const secure = String(process.env.EMAIL_SECURE || 'false') === 'true';
+
+      // Log di configurazione
+      console.log(`🔧 SMTP config → host=${host} port=${port} secure=${secure} user=${process.env.EMAIL_USER}`);
+      try {
+        if (typeof dns.setDefaultResultOrder === 'function') {
+          // Mostra l'ordine di risoluzione attuale
+          console.log('🌐 DNS result order attivo: ipv4first');
+        }
+        // Risolvi tutti gli indirizzi (IPv4/IPv6)
+        const addrs = await dnsPromises.lookup(host, { all: true });
+        console.log(`🧭 DNS lookup ${host} →`, addrs.map(a => `${a.address} (${a.family === 6 ? 'IPv6' : 'IPv4'})`).join(', '));
+      } catch (e) {
+        console.log('⚠️  Impossibile eseguire DNS lookup:', e?.message || e);
+      }
+
       const transporter = createTransporter();
       await transporter.verify();
       console.log('📧 SMTP transporter verificato: connessione pronta');
