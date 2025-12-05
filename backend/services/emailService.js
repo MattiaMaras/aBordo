@@ -1,7 +1,35 @@
 const nodemailer = require('nodemailer');
 const dns = require('dns');
 const { promises: dnsPromises } = dns;
+let sgMail = null;
+try {
+  // Carica sendgrid solo se disponibile; verrà utilizzato quando EMAIL_PROVIDER=sendgrid
+  sgMail = require('@sendgrid/mail');
+} catch (_) {
+  // opzionale: non bloccare se non installato
+}
+
+// Brevo via API HTTP
+let fetchFn = null;
+try {
+  fetchFn = require('node-fetch');
+} catch (_) {
+  // opzionale, Node >=18 ha fetch globale
+}
 const { pool } = require('../config/database');
+
+const getEmailProvider = () => String(process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+const isEmailConfigured = () => {
+  const provider = getEmailProvider();
+  if (provider === 'sendgrid') {
+    return Boolean(process.env.SENDGRID_API_KEY);
+  }
+  if (provider === 'brevo') {
+    return Boolean(process.env.BREVO_API_KEY);
+  }
+  // default smtp
+  return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+};
 
 const createTransporter = () => {
   return nodemailer.createTransport({
@@ -122,10 +150,51 @@ const computeStageFromDays = (deltaDays) => {
 // Invia email di notifica con stadio
 const sendExpiryNotification = async (user, vehicle, notification, stage) => {
   try {
-    const transporter = createTransporter();
+    const provider = getEmailProvider();
     const mailOptions = createExpiryNotificationEmail(user, vehicle, notification);
-    
-    const result = await transporter.sendMail(mailOptions);
+    let result;
+
+    if (provider === 'sendgrid') {
+      if (!sgMail) throw new Error('SendGrid non installato. Aggiungi @sendgrid/mail alle dipendenze.');
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      const msg = {
+        to: mailOptions.to,
+        from: mailOptions.from || process.env.SENDGRID_FROM || process.env.EMAIL_USER,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+      };
+      const [resp] = await sgMail.send(msg);
+      result = { messageId: resp.headers['x-message-id'] || 'sendgrid' };
+    } else if (provider === 'brevo') {
+      const apiKey = process.env.BREVO_API_KEY;
+      const sender = process.env.BREVO_SENDER || process.env.EMAIL_USER;
+      if (!apiKey) throw new Error('BREVO_API_KEY mancante.');
+      const payload = {
+        sender: { email: sender },
+        to: [{ email: mailOptions.to }],
+        subject: mailOptions.subject,
+        htmlContent: mailOptions.html,
+      };
+      const doFetch = global.fetch || fetchFn;
+      if (!doFetch) throw new Error('fetch non disponibile. Installa node-fetch o usa Node >=18.');
+      const resp = await doFetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Brevo API error: ${resp.status} ${text}`);
+      }
+      const data = await resp.json();
+      result = { messageId: data.messageId || 'brevo' };
+    } else {
+      const transporter = createTransporter();
+      result = await transporter.sendMail(mailOptions);
+    }
     
     // Log dell'email inviata
     await pool.query(
@@ -240,9 +309,29 @@ module.exports = {
   sendExpiryNotification,
   checkAndSendNotifications,
   createTransporter,
+  getEmailProvider,
+  isEmailConfigured,
   // Verifica la configurazione SMTP all'avvio per diagnosticare errori (DNS/credenziali/porta)
   verifyTransporter: async () => {
     try {
+      const provider = getEmailProvider();
+      if (provider === 'sendgrid') {
+        if (!sgMail) {
+          throw new Error('SendGrid non installato. Aggiungi @sendgrid/mail alle dipendenze.');
+        }
+        const apiKeyPresent = Boolean(process.env.SENDGRID_API_KEY);
+        console.log(`🔧 Email provider=sendgrid apiKeyPresent=${apiKeyPresent} from=${process.env.SENDGRID_FROM || process.env.EMAIL_USER}`);
+        if (!apiKeyPresent) throw new Error('SENDGRID_API_KEY mancante');
+        console.log('📧 SendGrid pronto (verifica base completata)');
+        return;
+      } else if (provider === 'brevo') {
+        const apiKeyPresent = Boolean(process.env.BREVO_API_KEY);
+        console.log(`🔧 Email provider=brevo apiKeyPresent=${apiKeyPresent} from=${process.env.BREVO_SENDER || process.env.EMAIL_USER}`);
+        if (!apiKeyPresent) throw new Error('BREVO_API_KEY mancante');
+        console.log('📧 Brevo pronto (verifica base completata)');
+        return;
+      }
+
       const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
       const port = Number(process.env.EMAIL_PORT || 587);
       const secure = String(process.env.EMAIL_SECURE || 'false') === 'true';

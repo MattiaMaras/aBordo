@@ -11,7 +11,7 @@ const vehicleRoutes = require('./routes/vehicles');
 const notificationRoutes = require('./routes/notifications');
 const costsRoutes = require('./routes/costs');
 const { authenticateToken } = require('./middleware/auth');
-const { checkAndSendNotifications, verifyTransporter } = require('./services/emailService');
+const { checkAndSendNotifications, verifyTransporter, isEmailConfigured, getEmailProvider } = require('./services/emailService');
 const cron = require('node-cron');
 
 const app = express();
@@ -203,12 +203,19 @@ const startServer = async () => {
       console.log(`📊 Ambiente: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
       
-      // Programma notifiche email (solo se email è configurata)
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        // Verifica SMTP una volta all'avvio per segnalare eventuali problemi di configurazione
-        verifyTransporter().finally(() => {
+      // Programma notifiche email se configurate (SMTP o SendGrid)
+      if (isEmailConfigured()) {
+        const provider = getEmailProvider();
+        if (provider === 'smtp') {
+          // Verifica SMTP per diagnostica, poi schedula
+          verifyTransporter().finally(() => {
+            scheduleNotifications();
+          });
+        } else {
+          // Provider API (es. SendGrid): nessuna verifica blocco, schedula direttamente
+          verifyTransporter();
           scheduleNotifications();
-        });
+        }
       } else {
         console.log('📧 Notifiche email non configurate');
       }
