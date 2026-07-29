@@ -15,9 +15,20 @@ if (String(process.env.DB_MOCK || 'false') === 'true') {
     }
   };
 } else {
+  // SSL: se è fornito il certificato CA del provider (DATABASE_CA_CERT, contenuto PEM)
+  // la connessione viene anche autenticata; altrimenti fallback a cifratura senza
+  // verifica del certificato (necessario ad es. con Render senza CA scaricata).
+  const buildSsl = () => {
+    if (process.env.NODE_ENV !== 'production') return false;
+    if (process.env.DATABASE_CA_CERT) {
+      return { rejectUnauthorized: true, ca: process.env.DATABASE_CA_CERT };
+    }
+    return { rejectUnauthorized: false };
+  };
+
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: buildSsl(),
     max: Number(process.env.PG_POOL_MAX || 10),
     idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT || 30000),
     connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT || 5000),
@@ -221,6 +232,11 @@ const createTables = async () => {
 
     // Creazione indici per performance
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vehicles_user_id ON vehicles(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_insurances_vehicle_id ON insurances(vehicle_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_car_taxes_vehicle_id ON car_taxes(vehicle_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_inspections_vehicle_id ON inspections(vehicle_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_services_vehicle_id ON services(vehicle_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_maintenances_vehicle_id ON maintenances(vehicle_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_vehicle_id ON notifications(vehicle_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications(status)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_expiry_date ON notifications(expiry_date)`);

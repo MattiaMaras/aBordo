@@ -7,6 +7,23 @@ const router = express.Router();
 // Tutte le route dei costi richiedono autenticazione
 router.use(authenticateToken);
 
+// Valida un parametro data in formato YYYY-MM-DD (evita 500 da input malformati)
+const isValidDateParam = (value) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(value);
+  return !Number.isNaN(d.getTime());
+};
+
+// Escape di un campo CSV: quota il valore e neutralizza le formule (=, +, -, @)
+// per prevenire CSV/formula injection quando il file viene aperto in Excel.
+const csvField = (value) => {
+  let s = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
+  return `"${s.replace(/"/g, '""')}"`;
+};
+
 // Riepilogo costi per periodo (start/end inclusivi) aggregati per categoria
 // Query params: start=YYYY-MM-DD, end=YYYY-MM-DD
 router.get('/summary', async (req, res) => {
@@ -14,8 +31,8 @@ router.get('/summary', async (req, res) => {
     const userId = req.user.id;
     const { start, end } = req.query;
 
-    if (!start || !end) {
-      return res.status(400).json({ error: 'Parametri start e end sono obbligatori' });
+    if (!isValidDateParam(start) || !isValidDateParam(end)) {
+      return res.status(400).json({ error: 'Parametri start e end obbligatori in formato YYYY-MM-DD' });
     }
 
     // Somme per categoria su tutti i veicoli dell'utente
@@ -71,8 +88,8 @@ router.get('/export', async (req, res) => {
     const userId = req.user.id;
     const { start, end } = req.query;
 
-    if (!start || !end) {
-      return res.status(400).json({ error: 'Parametri start e end sono obbligatori' });
+    if (!isValidDateParam(start) || !isValidDateParam(end)) {
+      return res.status(400).json({ error: 'Parametri start e end obbligatori in formato YYYY-MM-DD' });
     }
 
     // Recupera plate/brand/model per join uniforme
@@ -123,12 +140,12 @@ router.get('/export', async (req, res) => {
     const lines = [header.join(',')];
     for (const r of rows) {
       const line = [
-        r.category,
-        r.plate_number,
-        r.brand,
-        r.model,
-        r.date?.toISOString().split('T')[0] || '',
-        (r.description || '').toString().replace(/\n|\r|,/g, ' '),
+        csvField(r.category),
+        csvField(r.plate_number),
+        csvField(r.brand),
+        csvField(r.model),
+        csvField(r.date?.toISOString().split('T')[0] || ''),
+        csvField(r.description || ''),
         parseFloat(r.cost || 0).toFixed(2)
       ].join(',');
       lines.push(line);

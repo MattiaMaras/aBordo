@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Vehicle, DashboardStats, VehicleNotification, NotificationStatus } from '../types/vehicle';
-import { API_URL, getAuthHeaders, requestWithBackoff } from '../api/client';
+import { API_URL, apiFetch, getAuthHeaders } from '../api/client';
 
 // Input type per veicolo, allineato al payload del backend
 type VehicleFormInput = Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>;
@@ -25,7 +25,7 @@ export const useVehicles = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles`, {
+      const response = await apiFetch(`${API_URL}/vehicles`, {
         headers: getAuthHeaders(),
       });
 
@@ -48,7 +48,7 @@ export const useVehicles = () => {
   // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
     try {
-      const response = await requestWithBackoff(`${API_URL}/notifications`, {
+      const response = await apiFetch(`${API_URL}/notifications`, {
         headers: getAuthHeaders(),
       });
 
@@ -69,7 +69,7 @@ export const useVehicles = () => {
   // Fetch dashboard stats from API
   const fetchStats = useCallback(async () => {
     try {
-      const response = await requestWithBackoff(`${API_URL}/notifications/stats/summary`, {
+      const response = await apiFetch(`${API_URL}/notifications/stats/summary`, {
         headers: getAuthHeaders(),
       });
 
@@ -99,7 +99,7 @@ export const useVehicles = () => {
       const dd = String(endDate.getDate()).padStart(2, '0');
       const defaultEnd = `${yyyy}-${mm}-${dd}`;
 
-      const response = await requestWithBackoff(`${API_URL}/costs/summary?start=${encodeURIComponent(start || defaultStart)}&end=${encodeURIComponent(end || defaultEnd)}`, {
+      const response = await apiFetch(`${API_URL}/costs/summary?start=${encodeURIComponent(start || defaultStart)}&end=${encodeURIComponent(end || defaultEnd)}`, {
         headers: getAuthHeaders(),
       });
 
@@ -120,7 +120,7 @@ export const useVehicles = () => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles`, {
+      const response = await apiFetch(`${API_URL}/vehicles`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(vehicleData),
@@ -151,7 +151,7 @@ export const useVehicles = () => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(vehicleData),
@@ -182,7 +182,7 @@ export const useVehicles = () => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -218,7 +218,7 @@ export const useVehicles = () => {
         const vehicleId = parts[parts.length - 2];
         const today = new Date().toISOString().split('T')[0];
         const currentMileage = vehicles.find(v => String(v.id) === String(vehicleId))?.currentMileage ?? undefined;
-        const resp = await fetch(`${API_URL}/vehicles/${vehicleId}/maintenances/${maintenanceId}`, {
+        const resp = await apiFetch(`${API_URL}/vehicles/${vehicleId}/maintenances/${maintenanceId}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
           body: JSON.stringify({ lastMaintenance: today, lastMileage: currentMileage, clearNextMaintenance: true, clearNextMileage: true }),
@@ -234,7 +234,7 @@ export const useVehicles = () => {
         const vehicleId = parts[parts.length - 2];
         const today = new Date().toISOString().split('T')[0];
         const currentMileage = vehicles.find(v => String(v.id) === String(vehicleId))?.currentMileage ?? undefined;
-        const resp = await fetch(`${API_URL}/vehicles/${vehicleId}/services/${serviceId}`, {
+        const resp = await apiFetch(`${API_URL}/vehicles/${vehicleId}/services/${serviceId}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
           body: JSON.stringify({ lastServiceDate: today, lastServiceMileage: currentMileage, clearNextServiceMileage: true }),
@@ -244,7 +244,7 @@ export const useVehicles = () => {
           throw new Error(data.error || 'Errore nel registrare il tagliando come effettuato');
         }
       } else {
-        const response = await fetch(`${API_URL}/notifications/${notificationId}`, {
+        const response = await apiFetch(`${API_URL}/notifications/${notificationId}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
           body: JSON.stringify({ status }),
@@ -267,7 +267,7 @@ export const useVehicles = () => {
   // Delete notification
   const deleteNotification = async (notificationId: string) => {
     try {
-      const response = await fetch(`${API_URL}/notifications/${notificationId}`, {
+      const response = await apiFetch(`${API_URL}/notifications/${notificationId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });

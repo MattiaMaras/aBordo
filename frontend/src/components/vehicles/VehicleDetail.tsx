@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, Car, Calendar, MapPin, Fuel, FileText, Shield, CreditCard, Wrench, Plus } from 'lucide-react';
 import { Button } from '../common/Button';
 import { Card } from '../common/Card';
+import { Modal } from '../common/Modal';
 import { StatusBadge } from '../common/StatusBadge';
 import { Vehicle, VehicleNotification } from '../../types/vehicle';
 import { MaintenanceRecord } from '../../types/maintenance';
@@ -613,8 +614,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
 
       {/* Maintenance Info Modal */}
       {maintenanceInfoId && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-xl">
+        <Modal onClose={() => setMaintenanceInfoId(null)} labelledBy="maintenance-info-title" className="max-w-xl">
             <div className="p-6">
               {(() => {
                 const item = maintenances.find(m => m.id === maintenanceInfoId);
@@ -634,7 +634,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
                 return (
                   <>
                     <div className="flex items-start justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">Dettagli Manutenzione</h3>
+                      <h3 id="maintenance-info-title" className="text-lg font-semibold text-gray-900">Dettagli Manutenzione</h3>
                       <button className="text-gray-500 hover:text-gray-700" onClick={() => setMaintenanceInfoId(null)}>Chiudi</button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mb-4">
@@ -717,8 +717,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
                 );
               })()}
             </div>
-          </Card>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CarTax } from '../types/vehicle';
+import { API_URL, apiFetch, getAuthHeaders } from '../api/client';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const useCarTaxes = (vehicleId: string) => {
   const [taxes, setTaxes] = useState<CarTax[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  };
 
   const fetchTaxes = useCallback(async () => {
     try {
@@ -26,7 +19,7 @@ export const useCarTaxes = (vehicleId: string) => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}`, {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -51,7 +44,7 @@ export const useCarTaxes = (vehicleId: string) => {
         region: data.region,
         isPaid: (data as Partial<CarTax>).isPaid ?? true,
       };
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/taxes`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/taxes`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
@@ -73,7 +66,7 @@ export const useCarTaxes = (vehicleId: string) => {
   const updateTax = async (taxId: string, data: Partial<Omit<CarTax, 'id' | 'vehicleId'>>) => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/taxes/${taxId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/taxes/${taxId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(data),
@@ -95,7 +88,7 @@ export const useCarTaxes = (vehicleId: string) => {
   const deleteTax = async (taxId: string) => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/taxes/${taxId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/taxes/${taxId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });

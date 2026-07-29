@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MaintenanceRecord } from '../types/maintenance';
+import { API_URL, apiFetch, getAuthHeaders } from '../api/client';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const useMaintenances = (vehicleId: string) => {
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  };
 
   // Fetch maintenances for specific vehicle
   const fetchMaintenances = useCallback(async () => {
@@ -27,7 +20,7 @@ export const useMaintenances = (vehicleId: string) => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}`, {
         headers: getAuthHeaders(),
       });
 
@@ -51,7 +44,7 @@ export const useMaintenances = (vehicleId: string) => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/maintenances`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/maintenances`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(mapRecordToDbPayload(maintenanceData)),
@@ -78,7 +71,7 @@ export const useMaintenances = (vehicleId: string) => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/maintenances/${maintenanceId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/maintenances/${maintenanceId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(mapRecordToDbPayload(maintenanceData as Omit<MaintenanceRecord, 'id'>)),
@@ -105,7 +98,7 @@ export const useMaintenances = (vehicleId: string) => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/maintenances/${maintenanceId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/maintenances/${maintenanceId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });

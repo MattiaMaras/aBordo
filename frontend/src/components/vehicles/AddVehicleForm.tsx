@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../common/Button';
-import { Card } from '../common/Card';
+import { Modal } from '../common/Modal';
 import { Vehicle } from '../../types/vehicle';
 
 interface AddVehicleFormProps {
@@ -33,26 +33,27 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <Modal onClose={onCancel} labelledBy="add-vehicle-title" className="max-w-md max-h-[90vh] overflow-y-auto" closeOnBackdrop={false}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Aggiungi Veicolo</h2>
-            <button 
+            <h2 id="add-vehicle-title" className="text-xl font-semibold text-gray-900">Aggiungi Veicolo</h2>
+            <button
               onClick={onCancel}
+              aria-label="Chiudi form aggiunta veicolo"
               className="text-gray-400 hover:text-gray-600 transition-colors"
             >
-              <X className="h-6 w-6" />
+              <X className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="vehicle-plateNumber" className="block text-sm font-medium text-gray-700 mb-1">
                 Targa
               </label>
               <input
                 type="text"
+                id="vehicle-plateNumber"
                 name="plateNumber"
                 value={formData.plateNumber}
                 onChange={handleChange}
@@ -63,11 +64,12 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="vehicle-brand" className="block text-sm font-medium text-gray-700 mb-1">
                 Marca
               </label>
               <input
                 type="text"
+                id="vehicle-brand"
                 name="brand"
                 value={formData.brand}
                 onChange={handleChange}
@@ -78,11 +80,12 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="vehicle-model" className="block text-sm font-medium text-gray-700 mb-1">
                 Modello
               </label>
               <input
                 type="text"
+                id="vehicle-model"
                 name="model"
                 value={formData.model}
                 onChange={handleChange}
@@ -93,11 +96,12 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="vehicle-year" className="block text-sm font-medium text-gray-700 mb-1">
                 Anno
               </label>
               <input
                 type="number"
+                id="vehicle-year"
                 name="year"
                 value={formData.year}
                 onChange={handleChange}
@@ -109,11 +113,12 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="vehicle-currentMileage" className="block text-sm font-medium text-gray-700 mb-1">
                 Chilometraggio Attuale
               </label>
               <input
                 type="number"
+                id="vehicle-currentMileage"
                 name="currentMileage"
                 value={formData.currentMileage}
                 onChange={handleChange}
@@ -125,10 +130,11 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="vehicle-fuelType" className="block text-sm font-medium text-gray-700 mb-1">
                 Tipo Carburante
               </label>
               <select
+                id="vehicle-fuelType"
                 name="fuelType"
                 value={formData.fuelType}
                 onChange={handleChange}
@@ -154,7 +160,6 @@ export const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onSubmit, onCanc
             </div>
           </form>
         </div>
-      </Card>
-    </div>
+    </Modal>
   );
 };

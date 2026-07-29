@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../common/Button';
 import { Vehicle } from '../../types/vehicle';
+import { API_URL, apiFetch, getAuthHeaders } from '../../api/client';
 
 type CostCategory = 'maintenance' | 'inspection' | 'tax' | 'insurance';
 
@@ -20,7 +21,6 @@ interface CostsPageProps {
   refreshToken?: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshToken = 0 }) => {
   const [items, setItems] = React.useState<CostItem[]>([]);
@@ -35,20 +35,13 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
   const [summaryLoading, setSummaryLoading] = React.useState<boolean>(false);
   const [summaryError, setSummaryError] = React.useState<string | null>(null);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  };
 
   const fetchAllCosts = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const requests = vehicles.map(async (v) => {
-        const res = await fetch(`${API_URL}/vehicles/${v.id}`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_URL}/vehicles/${v.id}`, { headers: getAuthHeaders() });
         if (!res.ok) { throw new Error('Errore nel recupero dei dettagli veicolo'); }
         const data = await res.json();
 
@@ -134,7 +127,7 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
       setSummaryLoading(true);
       setSummaryError(null);
       const { start, end } = getPeriodRange();
-      const res = await fetch(`${API_URL}/costs/summary?start=${start}&end=${end}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`${API_URL}/costs/summary?start=${start}&end=${end}`, { headers: getAuthHeaders() });
       if (!res.ok) { throw new Error('Errore nel recupero del riepilogo costi'); }
       const data = await res.json();
       setSummary(data);
@@ -185,7 +178,7 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
   const handleExportCsv = async () => {
     try {
       const { start, end } = getPeriodRange();
-      const res = await fetch(`${API_URL}/costs/export?start=${start}&end=${end}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`${API_URL}/costs/export?start=${start}&end=${end}`, { headers: getAuthHeaders() });
       if (!res.ok) { throw new Error('Errore nella generazione del CSV'); }
       const csv = await res.text();
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

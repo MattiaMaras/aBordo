@@ -17,16 +17,49 @@ import { SettingsModal } from './components/modals/SettingsModal';
 import { ProfileModal } from './components/modals/ProfileModal';
 import { Button } from './components/common/Button';
 import { useVehicles } from './hooks/useVehicles';
-import { MaintenanceRecord} from './types/maintenance';
+import { MaintenanceRecord } from './types/maintenance';
 import { useMaintenances } from './hooks/useMaintenances';
 import { Vehicle } from './types/vehicle';
 import { DeadlinesPage } from './components/deadlines/DeadlinesPage';
 import { CostsPage } from './components/costs/CostsPage';
 import { Toaster } from 'sonner';
 import { normalizeMaintenanceList } from './api/normalizers';
+import { API_URL, apiFetch } from './api/client';
+
+// Skeleton mostrato durante il primo caricamento: replica il layout reale
+// (stat cards + lista veicoli) invece di uno spinner generico.
+const DashboardSkeleton: React.FC = () => (
+  <div className="min-h-screen bg-gray-50" aria-busy="true" aria-label="Caricamento in corso">
+    <div className="bg-white border-b border-gray-200 h-16" />
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse">
+      <div className="h-8 w-72 bg-gray-200 rounded mb-3" />
+      <div className="h-5 w-96 max-w-full bg-gray-200 rounded mb-8" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="h-4 w-24 bg-gray-200 rounded mb-4" />
+            <div className="h-8 w-16 bg-gray-200 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
+          {[0, 1].map((i) => (
+            <div key={i} className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="h-6 w-40 bg-gray-200 rounded mb-4" />
+              <div className="h-4 w-full bg-gray-200 rounded mb-2" />
+              <div className="h-4 w-2/3 bg-gray-200 rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-6 h-64" />
+      </div>
+    </main>
+  </div>
+);
 
 const Dashboard: React.FC = () => {
-const { vehicles, notifications, stats, loading, addVehicle, updateVehicle, getNotificationsForVehicle, updateNotificationStatus, refreshNotifications } = useVehicles();
+  const { vehicles, notifications, stats, loading, addVehicle, updateVehicle, getNotificationsForVehicle, updateNotificationStatus, refreshNotifications } = useVehicles();
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const { maintenances, addMaintenance, updateMaintenance, deleteMaintenance } = useMaintenances(selectedVehicle?.id ?? '');
   const [costsRefreshToken, setCostsRefreshToken] = useState(0);
@@ -40,46 +73,44 @@ const { vehicles, notifications, stats, loading, addVehicle, updateVehicle, getN
   const showCosts = location.pathname === '/costs';
   const showHistory = location.pathname === '/history';
 
-  
-
-  // Stats già calcolate dall'hook useVehicles (expiringSoon e totalMonthlyCosts allineati al backend)
-
   const handleAddVehicle = (vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'updatedAt'>) => {
     addVehicle(vehicleData);
     setShowAddForm(false);
   };
 
   const [maintenancesByVehicle, setMaintenancesByVehicle] = useState<Record<string, MaintenanceRecord[]>>({});
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-  };
 
   const loadMaintenances = React.useCallback(async () => {
     try {
-      const entries = await Promise.all(vehicles.map(async (v) => {
-        const resp = await fetch(`${API_URL}/vehicles/${v.id}`, { headers: getAuthHeaders() });
-        if (!resp.ok) return [String(v.id), [] as MaintenanceRecord[]] as const;
-        const data = await resp.json();
-        const maintList = Array.isArray(data.maintenances) ? data.maintenances : [];
-        const normalized = normalizeMaintenanceList(maintList, String(v.id));
-        return [String(v.id), normalized] as const;
-      }));
+      // Una sola richiesta per tutte le manutenzioni dell'utente (evita N+1)
+      const resp = await apiFetch(`${API_URL}/vehicles/maintenances/all`);
+      if (!resp.ok) {
+        setMaintenancesByVehicle({});
+        return;
+      }
+      const data = await resp.json();
+      const all: any[] = Array.isArray(data.maintenances) ? data.maintenances : [];
+      const grouped: Record<string, any[]> = {};
+      for (const m of all) {
+        const vid = String(m.vehicle_id ?? m.vehicleId ?? '');
+        (grouped[vid] ??= []).push(m);
+      }
       const obj: Record<string, MaintenanceRecord[]> = {};
-      entries.forEach(([vid, maints]) => { obj[vid] = maints; });
+      for (const [vid, list] of Object.entries(grouped)) {
+        obj[vid] = normalizeMaintenanceList(list, vid);
+      }
       setMaintenancesByVehicle(obj);
     } catch {
       setMaintenancesByVehicle({});
     }
-  }, [vehicles]);
+  }, []);
 
   useEffect(() => {
     if (vehicles.length > 0) loadMaintenances(); else setMaintenancesByVehicle({});
   }, [vehicles, loadMaintenances]);
 
   const maintenanceUrgents = (() => {
-    const labelForMaintenanceType = (t: any) => {
+    const labelForMaintenanceType = (t: string) => {
       const map: Record<string, string> = {
         oil: 'Cambio olio',
         filters: 'Filtri',
@@ -90,7 +121,7 @@ const { vehicles, notifications, stats, loading, addVehicle, updateVehicle, getN
       };
       return map[t] || 'Manutenzione';
     };
-    const list: { id: string; vehicleId: string; type: 'maintenance'; status: 'critical'|'warning'; daysUntilExpiry: number; message: string; expiryDate: string }[] = [];
+    const list: { id: string; vehicleId: string; type: 'maintenance'; status: 'critical' | 'warning'; daysUntilExpiry: number; message: string; expiryDate: string }[] = [];
     vehicles.forEach(v => {
       const maints = maintenancesByVehicle[String(v.id)] || [];
       maints.forEach((m: any) => {
@@ -145,285 +176,28 @@ const { vehicles, notifications, stats, loading, addVehicle, updateVehicle, getN
 
   const urgentCount = priorityNotifications.length;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Caricamento A Bordo...</p>
-        </div>
-      </div>
-    );
-  }
+  // Navigazione unificata: torna alla dashboard azzerando il veicolo selezionato
+  const goTo = (path: string) => {
+    navigate(path);
+    setSelectedVehicle(null);
+  };
 
-  if (showDeadlines) {
-    const priorityNotifications = [...notifications.filter(n => n.type !== 'maintenance'), ...maintenanceUrgents]
-      .filter(n => n.status === 'critical' || n.status === 'warning')
-      .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
-      .slice(0, 10);
-
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header 
-          notificationCount={urgentCount}
-          onNotificationClick={() => setShowNotificationModal(true)}
-          onSettingsClick={() => setShowSettingsModal(true)}
-          onProfileClick={() => setShowProfileModal(true)}
-          onDeadlinesClick={() => { navigate('/deadlines'); }}
-          onCostsClick={() => { navigate('/costs'); }}
-          onLogoClick={() => navigate('/')}
-          onVehiclesClick={() => { navigate('/'); setSelectedVehicle(null); }}
-        />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <DeadlinesPage
-            notifications={notifications}
-            vehicles={vehicles}
-            onUpdateNotification={updateNotificationStatus}
-            onBack={() => navigate('/')}
-          />
-        </main>
-        {showNotificationModal && (
-          <NotificationModal
-            notifications={priorityNotifications}
-            onClose={() => setShowNotificationModal(false)}
-          />
-        )}
-        {showSettingsModal && (
-          <SettingsModal onClose={() => setShowSettingsModal(false)} />
-        )}
-        {showProfileModal && (
-          <ProfileModal onClose={() => setShowProfileModal(false)} />
-        )}
-      </div>
-    );
-  }
-
-  if (showCosts) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header 
-          notificationCount={urgentCount}
-          onNotificationClick={() => setShowNotificationModal(true)}
-          onSettingsClick={() => setShowSettingsModal(true)}
-          onProfileClick={() => setShowProfileModal(true)}
-          onDeadlinesClick={() => { navigate('/deadlines'); }}
-          onCostsClick={() => { navigate('/costs'); }}
-          onLogoClick={() => navigate('/')}
-          onVehiclesClick={() => { navigate('/'); setSelectedVehicle(null); }}
-        />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <CostsPage vehicles={vehicles} onBack={() => navigate('/')} refreshToken={costsRefreshToken} />
-        </main>
-        {showNotificationModal && (
-          <NotificationModal
-            notifications={priorityNotifications}
-            onClose={() => setShowNotificationModal(false)}
-          />
-        )}
-        {showSettingsModal && (
-          <SettingsModal onClose={() => setShowSettingsModal(false)} />
-        )}
-        {showProfileModal && (
-          <ProfileModal onClose={() => setShowProfileModal(false)} />
-        )}
-      </div>
-    );
-  }
-
-  if (showHistory) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header 
-          notificationCount={urgentCount}
-          onNotificationClick={() => setShowNotificationModal(true)}
-          onSettingsClick={() => setShowSettingsModal(true)}
-          onProfileClick={() => setShowProfileModal(true)}
-          onDeadlinesClick={() => { navigate('/deadlines'); }}
-          onCostsClick={() => { navigate('/costs'); }}
-          onLogoClick={() => navigate('/')}
-        />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <HistoryPage vehicles={vehicles} onBack={() => navigate('/')} />
-        </main>
-        {showNotificationModal && (
-          <NotificationModal
-            notifications={priorityNotifications}
-            onClose={() => setShowNotificationModal(false)}
-          />
-        )}
-        {showSettingsModal && (
-          <SettingsModal onClose={() => setShowSettingsModal(false)} />
-        )}
-        {showProfileModal && (
-          <ProfileModal onClose={() => setShowProfileModal(false)} />
-        )}
-      </div>
-    );
-  }
-
-  if (selectedVehicle) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header 
-          notificationCount={urgentCount}
-          onNotificationClick={() => setShowNotificationModal(true)}
-          onSettingsClick={() => setShowSettingsModal(true)}
-          onProfileClick={() => setShowProfileModal(true)}
-          onDeadlinesClick={() => { navigate('/deadlines'); setSelectedVehicle(null); }}
-          onCostsClick={() => { navigate('/costs'); setSelectedVehicle(null); }}
-          onLogoClick={() => setSelectedVehicle(null)}
-          onVehiclesClick={() => { navigate('/'); setSelectedVehicle(null); }}
-        />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <VehicleDetail
-            vehicle={selectedVehicle}
-            notifications={getNotificationsForVehicle(selectedVehicle.id)}
-            maintenances={maintenances}
-            onBack={() => setSelectedVehicle(null)}
-            onAddMaintenance={async (maintenance) => {
-              const res = await addMaintenance(maintenance);
-              if ((res as any)?.success) {
-                await refreshNotifications();
-                setCostsRefreshToken(prev => prev + 1);
-                await loadMaintenances();
-              }
-              return res as any;
-            }}
-            onRefreshNotifications={async () => { await refreshNotifications(); await loadMaintenances(); }}
-            onUpdateMaintenance={updateMaintenance}
-            onDeleteMaintenance={async (id) => {
-              const res = await deleteMaintenance(id);
-              if (res && res.success) {
-                await refreshNotifications();
-                setCostsRefreshToken(prev => prev + 1);
-                await loadMaintenances();
-              }
-              return res as any;
-            }}
-            onUpdateVehicleMileage={async (newMileage: number) => {
-              const res = await updateVehicle(selectedVehicle.id, { currentMileage: newMileage });
-              if (res.success) {
-                setSelectedVehicle(prev => prev ? { ...prev, currentMileage: newMileage } : prev);
-              }
-              return res;
-            }}
-          />
-        </main>
-        
-        {/* Modals */}
-        {showNotificationModal && (
-          <NotificationModal
-            notifications={priorityNotifications}
-            onClose={() => setShowNotificationModal(false)}
-          />
-        )}
-        {showSettingsModal && (
-          <SettingsModal onClose={() => setShowSettingsModal(false)} />
-        )}
-        {showProfileModal && (
-          <ProfileModal onClose={() => setShowProfileModal(false)} />
-        )}
-      </div>
-    );
-  }
-
-  return (
+  // Shell unica per tutte le viste autenticate: Header + contenuto + modali.
+  const shell = (content: React.ReactNode) => (
     <div className="min-h-screen bg-gray-50">
-        <Header 
-          notificationCount={priorityNotifications.length}
-          onNotificationClick={() => setShowNotificationModal(true)}
-          onSettingsClick={() => setShowSettingsModal(true)}
-          onProfileClick={() => setShowProfileModal(true)}
-          onDeadlinesClick={() => navigate('/deadlines')}
-          onCostsClick={() => navigate('/costs')}
-          onLogoClick={() => { navigate('/'); setSelectedVehicle(null); }}
-          onVehiclesClick={() => { navigate('/'); setSelectedVehicle(null); }}
-        />
-      
+      <Header
+        notificationCount={urgentCount}
+        onNotificationClick={() => setShowNotificationModal(true)}
+        onSettingsClick={() => setShowSettingsModal(true)}
+        onProfileClick={() => setShowProfileModal(true)}
+        onDeadlinesClick={() => goTo('/deadlines')}
+        onCostsClick={() => goTo('/costs')}
+        onLogoClick={() => goTo('/')}
+        onVehiclesClick={() => goTo('/')}
+      />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Benvenuto su A Bordo
-          </h1>
-          <p className="text-lg text-gray-600">
-            Gestisci i tuoi veicoli, monitora le scadenze e mantieni tutto sotto controllo
-          </p>
-        </div>
-
-        {/* Stats Grid */}
-        <StatsGrid stats={stats} onDeadlinesClick={() => navigate('/deadlines')} />
-
-        {/* Quick action: History page link */}
-        <div className="mt-6 mb-4 flex items-center justify-end">
-          <button
-            onClick={() => navigate('/history')}
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-          >
-            Storico interventi e pagamenti →
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Vehicles Section */}
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">
-                I Tuoi Veicoli ({vehicles.length})
-              </h2>
-              <Button onClick={() => setShowAddForm(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Aggiungi Veicolo
-              </Button>
-            </div>
-
-            {vehicles.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                <div className="max-w-sm mx-auto">
-                  <svg className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nessun veicolo registrato</h3>
-                  <p className="text-gray-500 mb-4">Inizia aggiungendo il tuo primo veicolo per monitorare tutte le scadenze</p>
-                  <Button onClick={() => setShowAddForm(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Aggiungi il primo veicolo
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid gap-6">
-                {vehicles.map((vehicle) => (
-                  <VehicleCard
-                    key={vehicle.id}
-                    vehicle={vehicle}
-                    notifications={getNotificationsForVehicle(vehicle.id)}
-                    onSelect={setSelectedVehicle}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Notifications Panel */}
-          <div className="lg:col-span-1">
-          <NotificationCenter
-            notifications={priorityNotifications}
-            onViewAll={() => navigate('/deadlines')}
-          />
-          </div>
-        </div>
+        {content}
       </main>
-
-      {/* Add Vehicle Modal */}
-      {showAddForm && (
-        <AddVehicleForm
-          onSubmit={handleAddVehicle}
-          onCancel={() => setShowAddForm(false)}
-        />
-      )}
-      
-      {/* Modals */}
       {showNotificationModal && (
         <NotificationModal
           notifications={priorityNotifications}
@@ -437,6 +211,156 @@ const { vehicles, notifications, stats, loading, addVehicle, updateVehicle, getN
         <ProfileModal onClose={() => setShowProfileModal(false)} />
       )}
     </div>
+  );
+
+  if (loading) {
+    return <DashboardSkeleton />;
+  }
+
+  if (showDeadlines) {
+    return shell(
+      <DeadlinesPage
+        notifications={notifications}
+        vehicles={vehicles}
+        onUpdateNotification={updateNotificationStatus}
+        onBack={() => goTo('/')}
+      />
+    );
+  }
+
+  if (showCosts) {
+    return shell(
+      <CostsPage vehicles={vehicles} onBack={() => goTo('/')} refreshToken={costsRefreshToken} />
+    );
+  }
+
+  if (showHistory) {
+    return shell(
+      <HistoryPage vehicles={vehicles} onBack={() => goTo('/')} />
+    );
+  }
+
+  if (selectedVehicle) {
+    return shell(
+      <VehicleDetail
+        vehicle={selectedVehicle}
+        notifications={getNotificationsForVehicle(selectedVehicle.id)}
+        maintenances={maintenances}
+        onBack={() => setSelectedVehicle(null)}
+        onAddMaintenance={async (maintenance) => {
+          const res = await addMaintenance(maintenance);
+          if ((res as any)?.success) {
+            await refreshNotifications();
+            setCostsRefreshToken(prev => prev + 1);
+            await loadMaintenances();
+          }
+          return res as any;
+        }}
+        onRefreshNotifications={async () => { await refreshNotifications(); await loadMaintenances(); }}
+        onUpdateMaintenance={updateMaintenance}
+        onDeleteMaintenance={async (id) => {
+          const res = await deleteMaintenance(id);
+          if (res && res.success) {
+            await refreshNotifications();
+            setCostsRefreshToken(prev => prev + 1);
+            await loadMaintenances();
+          }
+          return res as any;
+        }}
+        onUpdateVehicleMileage={async (newMileage: number) => {
+          const res = await updateVehicle(selectedVehicle.id, { currentMileage: newMileage });
+          if (res.success) {
+            setSelectedVehicle(prev => prev ? { ...prev, currentMileage: newMileage } : prev);
+          }
+          return res;
+        }}
+      />
+    );
+  }
+
+  return shell(
+    <>
+      {/* Welcome Section */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Benvenuto su A Bordo
+        </h1>
+        <p className="text-lg text-gray-600">
+          Gestisci i tuoi veicoli, monitora le scadenze e mantieni tutto sotto controllo
+        </p>
+      </div>
+
+      {/* Stats Grid */}
+      <StatsGrid stats={stats} onDeadlinesClick={() => navigate('/deadlines')} />
+
+      {/* Quick action: History page link */}
+      <div className="mt-6 mb-4 flex items-center justify-end">
+        <button
+          onClick={() => navigate('/history')}
+          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+        >
+          Storico interventi e pagamenti →
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Vehicles Section */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">
+              I Tuoi Veicoli ({vehicles.length})
+            </h2>
+            <Button onClick={() => setShowAddForm(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Aggiungi Veicolo
+            </Button>
+          </div>
+
+          {vehicles.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+              <div className="max-w-sm mx-auto">
+                <svg className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Nessun veicolo registrato</h3>
+                <p className="text-gray-600 mb-4">Inizia aggiungendo il tuo primo veicolo per monitorare tutte le scadenze</p>
+                <Button onClick={() => setShowAddForm(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Aggiungi il primo veicolo
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-6">
+              {vehicles.map((vehicle) => (
+                <VehicleCard
+                  key={vehicle.id}
+                  vehicle={vehicle}
+                  notifications={getNotificationsForVehicle(vehicle.id)}
+                  onSelect={setSelectedVehicle}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Notifications Panel */}
+        <div className="lg:col-span-1">
+          <NotificationCenter
+            notifications={priorityNotifications}
+            onViewAll={() => navigate('/deadlines')}
+          />
+        </div>
+      </div>
+
+      {/* Add Vehicle Modal */}
+      {showAddForm && (
+        <AddVehicleForm
+          onSubmit={handleAddVehicle}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
+    </>
   );
 };
 
@@ -453,14 +377,7 @@ const AppContent: React.FC = () => {
   const { isAuthenticated, initializing } = useAuth();
 
   if (initializing) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Caricamento A Bordo...</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   if (!isAuthenticated) {

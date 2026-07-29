@@ -2,22 +2,17 @@ import React from 'react';
 import { Vehicle } from '../../types/vehicle';
 import { MaintenanceRecord } from '../../types/maintenance';
 import { normalizeMaintenanceList, normalizeServiceList } from '../../api/normalizers';
+import { API_URL, apiFetch, getAuthHeaders } from '../../api/client';
 
 type Props = {
   vehicles: Vehicle[];
 };
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const HistorySection: React.FC<Props> = ({ vehicles }) => {
   const [records, setRecords] = React.useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-  };
 
   const fetchVehicleHistory = React.useCallback(async () => {
     try {
@@ -25,7 +20,7 @@ export const HistorySection: React.FC<Props> = ({ vehicles }) => {
       setError(null);
       const all: MaintenanceRecord[] = [];
       for (const v of vehicles) {
-        const resp = await fetch(`${API_URL}/vehicles/${v.id}`, { headers: getAuthHeaders() });
+        const resp = await apiFetch(`${API_URL}/vehicles/${v.id}`, { headers: getAuthHeaders() });
         if (!resp.ok) continue;
         const data = await resp.json();
         const vehicleId = String(v.id);

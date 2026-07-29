@@ -46,6 +46,14 @@ const createTransporter = () => {
   });
 };
 
+// Escape dei dati utente interpolati nell'HTML delle email (targa, nome, messaggio...)
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
 // Template email per notifiche scadenze
 const createExpiryNotificationEmail = (user, vehicle, notification) => {
   const today = new Date();
@@ -69,7 +77,7 @@ const createExpiryNotificationEmail = (user, vehicle, notification) => {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${subject}</title>
+      <title>${escapeHtml(subject)}</title>
     </head>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
@@ -79,21 +87,21 @@ const createExpiryNotificationEmail = (user, vehicle, notification) => {
       <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 10px 10px;">
         <h2 style="color: #dc2626; margin-bottom: 20px;">⚠️ Scadenza Imminente</h2>
         
-        <p style="font-size: 16px; margin-bottom: 20px;">Ciao <strong>${user.first_name},</strong></p>
+        <p style="font-size: 16px; margin-bottom: 20px;">Ciao <strong>${escapeHtml(user.first_name)},</strong></p>
         
         <p style="margin-bottom: 20px;">ti informiamo che sta per avvicinarsi un'importante scadenza per il tuo veicolo:</p>
         
         <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h3 style="margin: 0 0 15px 0; color: #1f2937;">📋 Dettagli Veicolo</h3>
-          <p style="margin: 5px 0;"><strong>Targa:</strong> ${vehicle.plate_number}</p>
-          <p style="margin: 5px 0;"><strong>Marca/Modello:</strong> ${vehicle.brand} ${vehicle.model}</p>
-          <p style="margin: 5px 0;"><strong>Anno:</strong> ${vehicle.year}</p>
+          <p style="margin: 5px 0;"><strong>Targa:</strong> ${escapeHtml(vehicle.plate_number)}</p>
+          <p style="margin: 5px 0;"><strong>Marca/Modello:</strong> ${escapeHtml(vehicle.brand)} ${escapeHtml(vehicle.model)}</p>
+          <p style="margin: 5px 0;"><strong>Anno:</strong> ${escapeHtml(vehicle.year)}</p>
         </div>
         
         <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 20px; margin-bottom: 20px;">
           <h3 style="margin: 0 0 15px 0; color: #dc2626;">📅 Dettagli Scadenza</h3>
           <p style="margin: 5px 0;"><strong>Tipo:</strong> ${getNotificationTypeLabel(notification.type)}</p>
-          <p style="margin: 5px 0;"><strong>Descrizione:</strong> ${baseMessage || notification.message}</p>
+          <p style="margin: 5px 0;"><strong>Descrizione:</strong> ${escapeHtml(baseMessage || notification.message)}</p>
           <p style="margin: 5px 0;"><strong>Data di scadenza:</strong> ${formatDate(notification.expiry_date)}</p>
           ${deltaDays >= 0
             ? `<p style="margin: 5px 0;"><strong>Giorni rimanenti:</strong> ${deltaDays}</p>`

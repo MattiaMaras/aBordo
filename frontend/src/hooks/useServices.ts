@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Service } from '../types/vehicle';
+import { API_URL, apiFetch, getAuthHeaders } from '../api/client';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const useServices = (vehicleId: string) => {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  };
 
   const fetchServices = useCallback(async () => {
     try {
@@ -22,7 +15,7 @@ export const useServices = (vehicleId: string) => {
       setError(null);
       if (!vehicleId) { setServices([]); return; }
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}`, { headers: getAuthHeaders() });
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}`, { headers: getAuthHeaders() });
       if (!response.ok) { throw new Error('Errore nel recupero dei dati del veicolo'); }
       const vehicleData = await response.json();
       const list = Array.isArray(vehicleData.services) ? vehicleData.services : [];
@@ -42,7 +35,7 @@ export const useServices = (vehicleId: string) => {
         nextServiceMileage: data.nextServiceMileage,
         serviceType: data.serviceType,
       };
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/services`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/services`, {
         method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload)
       });
       if (!response.ok) { const d = await response.json(); throw new Error(d.error || 'Errore nell\'aggiunta tagliando'); }
@@ -55,7 +48,7 @@ export const useServices = (vehicleId: string) => {
   const updateService = async (serviceId: string, data: Partial<Omit<Service, 'id' | 'vehicleId'>>) => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/services/${serviceId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/services/${serviceId}`, {
         method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(data)
       });
       if (!response.ok) { const d = await response.json(); throw new Error(d.error || 'Errore nell\'aggiornamento tagliando'); }
@@ -68,7 +61,7 @@ export const useServices = (vehicleId: string) => {
   const deleteService = async (serviceId: string) => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/services/${serviceId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/services/${serviceId}`, {
         method: 'DELETE', headers: getAuthHeaders()
       });
       if (!response.ok) { const d = await response.json(); throw new Error(d.error || 'Errore nell\'eliminazione tagliando'); }

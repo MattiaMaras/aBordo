@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { X, Settings } from 'lucide-react';
 import { Button } from '../common/Button';
+import { Modal } from '../common/Modal';
 import { useAuth } from '../../contexts/AuthContext';
-import { API_URL, getAuthHeaders } from '../../api/client';
+import { API_URL, apiFetch } from '../../api/client';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -26,7 +27,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const res = await fetch(`${API_URL}/auth/profile`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`${API_URL}/auth/profile`);
         if (!res.ok) return;
         const data = await res.json();
         const p = data?.user;
@@ -50,9 +51,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       setSaving(true);
       setStatusMsg(null);
       try {
-        const res = await fetch(`${API_URL}/auth/profile`, {
+        const res = await apiFetch(`${API_URL}/auth/profile`, {
           method: 'PUT',
-          headers: getAuthHeaders(),
           body: JSON.stringify({
             firstName: profile.firstName,
             lastName: profile.lastName,
@@ -76,18 +76,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+    <Modal onClose={onClose} labelledBy="settings-modal-title" className="max-w-md">
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center space-x-3">
-            <Settings className="h-6 w-6 text-blue-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Impostazioni</h2>
+            <Settings className="h-6 w-6 text-blue-600" aria-hidden="true" />
+            <h2 id="settings-modal-title" className="text-xl font-semibold text-gray-900">Impostazioni</h2>
           </div>
-          <button 
+          <button
             onClick={onClose}
+            aria-label="Chiudi impostazioni"
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X className="h-6 w-6" />
+            <X className="h-6 w-6" aria-hidden="true" />
           </button>
         </div>
         <div className="p-6 space-y-4">
@@ -106,7 +106,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
           <div className="flex items-center justify-between">
             <div>
-              <p className="text.sm font-medium text-gray-700">Promemoria Settimanali</p>
+              <p className="text-sm font-medium text-gray-700">Promemoria Settimanali</p>
               <p className="text-xs text-gray-500">Riepilogo settimanale delle scadenze</p>
             </div>
             <input
@@ -144,9 +144,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 setStatusMsg(null);
                 setSendErrors([]);
                 try {
-                  const res = await fetch(`${API_URL}/notifications/send-emails`, {
+                  const res = await apiFetch(`${API_URL}/notifications/send-emails`, {
                     method: 'POST',
-                    headers: getAuthHeaders(),
                   });
                   if (res.ok) {
                     const data = await res.json();
@@ -171,7 +170,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           </div>
           <Button onClick={onClose} disabled={saving || sendingNow}>Chiudi</Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

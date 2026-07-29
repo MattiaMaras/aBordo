@@ -24,7 +24,7 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-      - key: BCRYPT_ROUNDS
+      - key: BCRYPT_COST
         value: 12
       - key: JWT_EXPIRES_IN
         value: 7d

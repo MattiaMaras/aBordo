@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
+const { validate, vehicleCreateSchema, vehicleUpdateSchema } = require('../validation/schemas');
 
 const router = express.Router();
 
@@ -45,6 +46,29 @@ router.get('/', async (req, res) => {
     res.status(500).json({ 
       error: 'Errore del server nel recupero dei veicoli' 
     });
+  }
+});
+
+// Tutte le manutenzioni dei veicoli dell'utente in una sola query.
+// Evita l'N+1 del dashboard (una GET /vehicles/:id per ogni veicolo).
+// NB: due segmenti di path, quindi non collide con GET /:id.
+router.get('/maintenances/all', async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      `SELECT m.*
+       FROM maintenances m
+       JOIN vehicles v ON m.vehicle_id = v.id
+       WHERE v.user_id = $1
+       ORDER BY m.vehicle_id, m.created_at DESC`,
+      [userId]
+    );
+
+    res.json({ maintenances: result.rows });
+  } catch (error) {
+    console.error('Errore nel recupero manutenzioni aggregate:', error);
+    res.status(500).json({ error: 'Errore del server nel recupero manutenzioni' });
   }
 });
 
@@ -107,37 +131,10 @@ router.get('/:id', async (req, res) => {
 });
 
 // Aggiungi un nuovo veicolo
-router.post('/', async (req, res) => {
+router.post('/', validate(vehicleCreateSchema), async (req, res) => {
   try {
     const userId = req.user.id;
     const { plateNumber, brand, model, year, currentMileage, fuelType } = req.body;
-
-    // Validazione input
-    if (!plateNumber || !brand || !model || year === undefined || year === null || currentMileage === undefined || currentMileage === null || !fuelType) {
-      return res.status(400).json({ 
-        error: 'Tutti i campi sono obbligatori' 
-      });
-    }
-
-    // Validazione campi
-    if (year < 1900 || year > new Date().getFullYear() + 1) {
-      return res.status(400).json({ 
-        error: 'Anno non valido' 
-      });
-    }
-
-    if (currentMileage < 0) {
-      return res.status(400).json({ 
-        error: 'Il chilometraggio non può essere negativo' 
-      });
-    }
-
-    const validFuelTypes = ['gasoline', 'diesel', 'hybrid', 'electric', 'lpg', 'methane'];
-    if (!validFuelTypes.includes(fuelType)) {
-      return res.status(400).json({ 
-        error: 'Tipo di carburante non valido' 
-      });
-    }
 
     // Inserimento nuovo veicolo
     const result = await pool.query(
@@ -180,7 +177,7 @@ router.post('/', async (req, res) => {
 });
 
 // Aggiorna un veicolo
-router.put('/:id', async (req, res) => {
+router.put('/:id', validate(vehicleUpdateSchema), async (req, res) => {
   try {
     const userId = req.user.id;
     const vehicleId = req.params.id;
@@ -193,21 +190,8 @@ router.put('/:id', async (req, res) => {
     );
 
     if (existingVehicle.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'Veicolo non trovato' 
-      });
-    }
-
-    // Validazione campi (solo se forniti)
-    if (year !== undefined && (year < 1900 || year > new Date().getFullYear() + 1)) {
-      return res.status(400).json({ 
-        error: 'Anno non valido' 
-      });
-    }
-
-    if (typeof currentMileage === 'number' && currentMileage < 0) {
-      return res.status(400).json({ 
-        error: 'Il chilometraggio non può essere negativo' 
+      return res.status(404).json({
+        error: 'Veicolo non trovato'
       });
     }
 
@@ -216,13 +200,6 @@ router.put('/:id', async (req, res) => {
     if (typeof currentMileage === 'number' && currentMileage < prevMileage) {
       return res.status(400).json({ 
         error: 'Il chilometraggio non può diminuire rispetto al valore attuale' 
-      });
-    }
-
-    const validFuelTypes = ['gasoline', 'diesel', 'hybrid', 'electric', 'lpg', 'methane'];
-    if (fuelType !== undefined && !validFuelTypes.includes(fuelType)) {
-      return res.status(400).json({ 
-        error: 'Tipo di carburante non valido' 
       });
     }
 

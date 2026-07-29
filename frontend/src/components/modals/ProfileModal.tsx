@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { X, User, Mail, Calendar } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../common/Button';
+import { Modal } from '../common/Modal';
+import { API_URL, apiFetch } from '../../api/client';
 
 interface ProfileModalProps {
   onClose: () => void;
@@ -9,21 +11,13 @@ interface ProfileModalProps {
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
   const { user } = useAuth();
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
   const [profile, setProfile] = useState<typeof user | null>(user);
 
   useEffect(() => {
     const loadProfile = async () => {
       if (profile) return;
-      const token = localStorage.getItem('token');
-      if (!token) return;
       try {
-        const res = await fetch(`${API_URL}/auth/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const res = await apiFetch(`${API_URL}/auth/profile`);
         if (res.ok) {
           const data = await res.json();
           setProfile(data?.user ?? null);
@@ -33,7 +27,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
       }
     };
     loadProfile();
-  }, [API_URL, profile]);
+  }, [profile]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT', {
@@ -45,20 +39,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
 
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+    <Modal onClose={onClose} labelledBy="profile-modal-title" className="max-w-md">
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-500 to-blue-600 text-white">
           <div className="flex items-center space-x-3">
             <div className="bg-white/20 p-2 rounded-lg">
-              <User className="h-6 w-6" />
+              <User className="h-6 w-6" aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-semibold">Il Mio Profilo</h2>
+            <h2 id="profile-modal-title" className="text-xl font-semibold">Il Mio Profilo</h2>
           </div>
-          <button 
+          <button
             onClick={onClose}
+            aria-label="Chiudi profilo"
             className="text-white/80 hover:text-white transition-colors"
           >
-            <X className="h-6 w-6" />
+            <X className="h-6 w-6" aria-hidden="true" />
           </button>
         </div>
 
@@ -103,7 +97,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
             Chiudi
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

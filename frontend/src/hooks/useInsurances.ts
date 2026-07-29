@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Insurance } from '../types/vehicle';
+import { API_URL, apiFetch, getAuthHeaders } from '../api/client';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const useInsurances = (vehicleId: string) => {
   const [insurances, setInsurances] = useState<Insurance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
-  };
 
   const fetchInsurances = useCallback(async () => {
     try {
@@ -26,7 +19,7 @@ export const useInsurances = (vehicleId: string) => {
         return;
       }
 
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}`, {
         headers: getAuthHeaders(),
       });
 
@@ -52,7 +45,7 @@ export const useInsurances = (vehicleId: string) => {
         expiryDate: data.expiryDate,
         annualPremium: data.annualPremium,
       };
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/insurances`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/insurances`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(payload),
@@ -74,7 +67,7 @@ export const useInsurances = (vehicleId: string) => {
   const updateInsurance = async (insuranceId: string, data: Partial<Omit<Insurance, 'id' | 'vehicleId' | 'paymentHistory'>>) => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/insurances/${insuranceId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/insurances/${insuranceId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(data),
@@ -96,7 +89,7 @@ export const useInsurances = (vehicleId: string) => {
   const deleteInsurance = async (insuranceId: string) => {
     try {
       setError(null);
-      const response = await fetch(`${API_URL}/vehicles/${vehicleId}/insurances/${insuranceId}`, {
+      const response = await apiFetch(`${API_URL}/vehicles/${vehicleId}/insurances/${insuranceId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });

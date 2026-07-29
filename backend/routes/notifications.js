@@ -31,10 +31,16 @@ router.get('/', async (req, res) => {
     `;
     
     const params = [userId];
-    
+
     if (status && ['safe', 'warning', 'critical', 'expired'].includes(status)) {
-      query += ' AND (CASE WHEN (n.expiry_date::date - CURRENT_DATE) < 0 THEN \'' + status + '\' = \'' + status + '\' WHEN (n.expiry_date::date - CURRENT_DATE) <= 7 THEN \'' + status + '\' = \'' + status + '\' WHEN (n.expiry_date::date - CURRENT_DATE) <= 30 THEN \'' + status + '\' = \'' + status + '\' ELSE \'' + status + '\' = \'' + status + '\' END)';
-      // Nota: per evitare SQL injection abbiamo già validato status; la condizione è artificiosa per usare computed_status senza una subquery.
+      params.push(status);
+      query += `
+        AND (CASE
+          WHEN (n.expiry_date::date - CURRENT_DATE) < 0 THEN 'expired'
+          WHEN (n.expiry_date::date - CURRENT_DATE) <= 7 THEN 'critical'
+          WHEN (n.expiry_date::date - CURRENT_DATE) <= 30 THEN 'warning'
+          ELSE 'safe'
+        END) = $${params.length}`;
     }
 
     query += ' ORDER BY computed_days ASC, n.created_at DESC';

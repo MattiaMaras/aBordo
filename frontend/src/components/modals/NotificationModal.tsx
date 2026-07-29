@@ -3,6 +3,7 @@ import { X, Bell, CheckCircle, AlertTriangle, Clock, XCircle } from 'lucide-reac
 import { VehicleNotification } from '../../types/vehicle';
 import { formatDate } from '../../utils/dateUtils';
 import { StatusBadge } from '../common/StatusBadge';
+import { Modal } from '../common/Modal';
 
 interface NotificationModalProps {
   notifications: VehicleNotification[];
@@ -27,12 +28,11 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ notificati
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+    <Modal onClose={onClose} labelledBy="notification-modal-title" className="max-w-2xl max-h-[80vh]">
         <div className="flex items-center justify-between p-6 border-b">
           <div className="flex items-center space-x-3">
-            <Bell className="h-6 w-6 text-blue-600" />
-            <h2 className="text-xl font-semibold text-gray-900">
+            <Bell className="h-6 w-6 text-blue-600" aria-hidden="true" />
+            <h2 id="notification-modal-title" className="text-xl font-semibold text-gray-900">
               Centro Notifiche
               {notifications.length > 0 && (
                 <span className="ml-2 bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
@@ -41,11 +41,12 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ notificati
               )}
             </h2>
           </div>
-          <button 
+          <button
             onClick={onClose}
+            aria-label="Chiudi centro notifiche"
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X className="h-6 w-6" />
+            <X className="h-6 w-6" aria-hidden="true" />
           </button>
         </div>
 
@@ -100,7 +101,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ notificati
             <p className="text-sm text-gray-600">
               Ricevi notifiche automatiche via email e app
             </p>
-            <button 
+            <button
               onClick={onClose}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
@@ -108,7 +109,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ notificati
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

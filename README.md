@@ -125,12 +125,19 @@ Per le notifiche email automatiche:
 
 ## Sicurezza
 
-- Password hashate con bcrypt
+- Password hashate con bcrypt (costo configurabile con `BCRYPT_COST`)
+- Sessione con cookie HttpOnly + fallback token Bearer (per browser che bloccano i cookie cross-site)
 - JWT con scadenza configurabile
-- Rate limiting sulle API
-- CORS configurato
+- Rate limiting sulle API, con limite severo dedicato a login/registrazione
+- CORS ristretto al solo `FRONTEND_URL` in produzione
 - Helmet.js per sicurezza HTTP headers
-- Validazione input su tutte le route
+- Validazione input con Zod su tutte le route
+- Escaping HTML nelle email e protezione formula-injection nell'export CSV
+
+Nota deploy: finché frontend (Vercel) e backend (Render) sono su domini diversi,
+Safari blocca il cookie di sessione third-party e l'app usa il fallback Bearer.
+Con un dominio custom condiviso (es. `app.tuodominio.it` + `api.tuodominio.it`)
+il cookie HttpOnly diventa la modalità principale.
 
 ## API Endpoints
 
@@ -158,8 +165,8 @@ Per le notifiche email automatiche:
 ```bash
 cd backend
 npm run dev        # Avvia in modalità sviluppo
-npm run test       # Esegui test
-npm run lint       # Controllo codice
+npm test           # Esegui test (node:test + supertest, nessun DB richiesto)
+npm run migrate    # Crea/allinea lo schema del database (richiede DATABASE_URL)
 ```
 
 ### Frontend

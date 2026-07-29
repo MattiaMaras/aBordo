@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuthContextType, LoginCredentials, RegisterData } from '../types/auth';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import { API_URL, apiFetch, setToken, clearToken, setUnauthorizedHandler } from '../api/client';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -23,45 +22,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
-  // Wrapper con backoff per gestire 429 Too Many Requests
-  const requestWithBackoff = async (input: RequestInfo, init?: RequestInit, retries = 2, baseDelayMs = 500) => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const response = await fetch(input, init);
-      if (response.status !== 429) {
-        return response;
-      }
-      const waitMs = baseDelayMs * (attempt + 1);
-      await new Promise(res => setTimeout(res, waitMs));
-    }
-    return fetch(input, init);
-  };
+  // Sessione scaduta (401 su qualunque chiamata): torna allo stato non autenticato
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   // Check if user is already logged in on mount (initializing only)
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const response = await requestWithBackoff(`${API_URL}/auth/profile`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
+      try {
+        // Cookie HttpOnly o token salvato: apiFetch li invia entrambi.
+        // skipUnauthorizedHandler: un 401 qui è solo "non loggato", non un errore.
+        const response = await apiFetch(`${API_URL}/auth/profile`, {}, { skipUnauthorizedHandler: true });
 
-          if (response.ok) {
-            const data = await response.json();
-            setUser(data?.user ?? null);
-          } else {
-            // Token is invalid or expired
-            localStorage.removeItem('token');
-            setUser(null);
-          }
-        } catch (error) {
-          console.error('Errore nel controllo autenticazione:', error);
-          localStorage.removeItem('token');
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data?.user ?? null);
+        } else {
+          clearToken();
           setUser(null);
         }
+      } catch (error) {
+        console.error('Errore nel controllo autenticazione:', error);
+        setUser(null);
       }
       setInitializing(false);
     };
@@ -93,14 +79,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       setLoading(true);
 
-      // Niente backoff sul login: evita retry multipli che generano 429
-      const response = await fetch(`${API_URL}/auth/login`, {
+      // Niente retry sul login (retries: 0): evita tentativi multipli che generano 429
+      const response = await apiFetch(`${API_URL}/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(credentials),
-      });
+      }, { retries: 0, skipUnauthorizedHandler: true });
 
       const isJson = response.headers.get('content-type')?.includes('application/json');
       let data: any = null;
@@ -137,7 +120,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setError('Risposta non valida dal server');
         return { success: false, error: 'Risposta non valida dal server' };
       }
-      localStorage.setItem('token', data.token);
+      // Il backend imposta anche un cookie HttpOnly; il token salvato resta
+      // come fallback per i browser che bloccano i cookie cross-site.
+      setToken(data.token);
       setUser(data.user);
       return { success: true };
     } catch (error) {
@@ -159,13 +144,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(null);
       setLoading(true);
 
-      const response = await requestWithBackoff(`${API_URL}/auth/register`, {
+      const response = await apiFetch(`${API_URL}/auth/register`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(credentials),
-      });
+      }, { skipUnauthorizedHandler: true });
 
       const data = await response.json();
 
@@ -173,7 +155,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error(data.error || 'Errore nella registrazione');
       }
 
-      localStorage.setItem('token', data.token);
+      setToken(data.token);
       setUser(data.user);
       return { success: true };
     } catch (error) {
@@ -187,22 +169,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    // Invalida il cookie HttpOnly lato server; best-effort, lo stato locale
+    // viene comunque azzerato subito.
+    apiFetch(`${API_URL}/auth/logout`, { method: 'POST' }, { skipUnauthorizedHandler: true })
+      .catch(() => undefined);
+    clearToken();
     setUser(null);
     setError(null);
   };
 
   const updateProfile = async (updates: Partial<User>) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('Non autenticato');
-
-      const response = await requestWithBackoff(`${API_URL}/auth/profile`, {
+      const response = await apiFetch(`${API_URL}/auth/profile`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(updates),
       });
 

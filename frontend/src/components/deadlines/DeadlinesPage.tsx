@@ -7,7 +7,7 @@ import { VehicleNotification, Vehicle, NotificationStatus, Service } from '../..
 import { MaintenanceRecord } from '../../types/maintenance';
 import { formatDate, getDaysUntilExpiry, getNotificationStatus } from '../../utils/dateUtils';
 import { toast } from 'sonner';
-import { API_URL, getAuthHeaders } from '../../api/client';
+import { API_URL, apiFetch, getAuthHeaders } from '../../api/client';
 import { normalizeServiceList, normalizeMaintenanceList } from '../../api/normalizers';
 
 interface DeadlinesPageProps {
@@ -65,7 +65,7 @@ export const DeadlinesPage: React.FC<DeadlinesPageProps> = ({ notifications, onB
     const loadAllServices = async () => {
       try {
         const entries = await Promise.all(vehicles.map(async (v) => {
-        const resp = await fetch(`${API}/vehicles/${v.id}`, { headers: getAuthHeaders() });
+        const resp = await apiFetch(`${API}/vehicles/${v.id}`, { headers: getAuthHeaders() });
         if (!resp.ok) return [String(v.id), [] as Service[], [] as MaintenanceRecord[]] as const;
         const data = await resp.json();
           const services = normalizeServiceList(Array.isArray(data.services) ? data.services : [], String(v.id));
