@@ -1,9 +1,8 @@
 import React from 'react';
+import { toast } from 'sonner';
 import { ArrowLeft, Car, Calendar, MapPin, Fuel, FileText, Shield, CreditCard, Wrench, Plus } from 'lucide-react';
 import { Button } from '../common/Button';
 import { Card } from '../common/Card';
-import { Modal } from '../common/Modal';
-import { StatusBadge } from '../common/StatusBadge';
 import { Vehicle, VehicleNotification } from '../../types/vehicle';
 import { MaintenanceRecord } from '../../types/maintenance';
 import { MaintenanceList } from '../maintenance/MaintenanceList';
@@ -15,32 +14,33 @@ import { useCarTaxes } from '../../hooks/useCarTaxes';
 import { useInspections } from '../../hooks/useInspections';
 import { useServices } from '../../hooks/useServices';
 
+type MaintenanceModalState = { mode: 'create' } | { mode: 'edit'; record: MaintenanceRecord } | null;
+
 interface VehicleDetailProps {
   vehicle: Vehicle;
   notifications: VehicleNotification[];
   maintenances: MaintenanceRecord[];
   onBack: () => void;
-  onAddMaintenance: (maintenance: Omit<MaintenanceRecord, 'id'>) => void;
+  onAddMaintenance: (maintenance: Omit<MaintenanceRecord, 'id'>) => Promise<{ success: boolean; error?: string; deduped?: boolean }> | void;
   onRefreshNotifications?: () => void;
   onUpdateMaintenance?: (maintenanceId: string, data: Partial<Omit<MaintenanceRecord, 'id'>>) => Promise<{ success: boolean; error?: string }> | void;
   onDeleteMaintenance?: (maintenanceId: string) => Promise<{ success: boolean; error?: string }> | void;
   onUpdateVehicleMileage?: (newMileage: number) => Promise<{ success: boolean; error?: string }> | void;
 }
 
-export const VehicleDetail: React.FC<VehicleDetailProps> = ({ 
-  vehicle, 
-  maintenances, 
-  onBack, 
+export const VehicleDetail: React.FC<VehicleDetailProps> = ({
+  vehicle,
+  maintenances,
+  onBack,
   onAddMaintenance,
   onRefreshNotifications,
+  onUpdateMaintenance,
   onDeleteMaintenance,
   onUpdateVehicleMileage
 }) => {
   // Filtro globale per anno
   const [selectedYear, setSelectedYear] = React.useState<number | 'all'>(new Date().getFullYear());
-  const [showAddMaintenance, setShowAddMaintenance] = React.useState(false);
-  const [maintenanceError, setMaintenanceError] = React.useState<string | null>(null);
-  const [maintenanceInfoId, setMaintenanceInfoId] = React.useState<string | null>(null);
+  const [maintenanceModal, setMaintenanceModal] = React.useState<MaintenanceModalState>(null);
   const [showAddInsurance, setShowAddInsurance] = React.useState(false);
   const [insuranceError, setInsuranceError] = React.useState<string | null>(null);
   const [showAddTax, setShowAddTax] = React.useState(false);
@@ -228,7 +228,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
             <Button variant="outline" onClick={() => setShowMaintenancesSection(v => !v)}>
               {showMaintenancesSection ? 'Nascondi' : 'Mostra'}
             </Button>
-            <Button onClick={() => setShowAddMaintenance(true)}>
+            <Button onClick={() => setMaintenanceModal({ mode: 'create' })}>
               <Plus className="h-4 w-4 mr-2" />
               Aggiungi Manutenzione
             </Button>
@@ -237,14 +237,21 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
         {showMaintenancesSection ? (
           <>
             <p className="text-sm text-gray-600 mb-4">Questa sezione registra interventi con costo (olio, filtri, freni, pneumatici, AdBlue, altro). Per assicurazione, bollo, revisione e tagliando usa le sezioni dedicate qui sotto.</p>
-            <MaintenanceList 
-              maintenances={filteredMaintenances} 
+            <MaintenanceList
+              maintenances={filteredMaintenances}
               currentMileage={vehicle.currentMileage ?? 0}
-              onEdit={(m) => setMaintenanceInfoId(m.id)}
+              onEdit={(m) => setMaintenanceModal({ mode: 'edit', record: m })}
               onDelete={async (id) => {
                 const res = await (onDeleteMaintenance?.(id) as unknown as Promise<{ success: boolean; error?: string }>);
-                if (res && res.success) { onRefreshNotifications?.(); }
+                if (res && res.success) {
+                  toast.success('Manutenzione eliminata con successo');
+                  onRefreshNotifications?.();
+                } else {
+                  toast.error(res?.error || 'Errore nell\'eliminazione della manutenzione');
+                }
+                return res;
               }}
+              onAddNew={() => setMaintenanceModal({ mode: 'create' })}
             />
             {filteredMaintenances.length > 0 && (
               <div className="mt-6 pt-4 border-t border-gray-200">
@@ -590,134 +597,40 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
         )}
       </Card>
 
-      {/* Add Maintenance Modal */}
-      {showAddMaintenance && (
+      {/* Modale unica per creazione e modifica manutenzione */}
+      {maintenanceModal && (
         <AddMaintenanceForm
           vehicle={vehicle}
-          errorMessage={maintenanceError ?? undefined}
-          onSubmit={async (maintenance) => {
-            if (typeof maintenance.mileage === 'number' && (vehicle.currentMileage ?? 0) < maintenance.mileage) {
-              await (onUpdateVehicleMileage?.(maintenance.mileage) as unknown as Promise<{ success: boolean; error?: string }>);
+          initialData={maintenanceModal.mode === 'edit' ? maintenanceModal.record : undefined}
+          onSubmit={async (data) => {
+            if (typeof data.mileage === 'number' && (vehicle.currentMileage ?? 0) < data.mileage) {
+              await (onUpdateVehicleMileage?.(data.mileage) as unknown as Promise<{ success: boolean; error?: string }>);
             }
-            const result = await (onAddMaintenance(maintenance) as unknown as Promise<{ success: boolean; error?: string }>);
-            if (result && (result as any).success) {
-              setMaintenanceError(null);
-              setShowAddMaintenance(false);
+
+            if (maintenanceModal.mode === 'edit') {
+              const res = await (onUpdateMaintenance?.(maintenanceModal.record.id, data) as unknown as Promise<{ success: boolean; error?: string }>);
+              if (res && res.success) {
+                toast.success('Manutenzione aggiornata con successo');
+                setMaintenanceModal(null);
+                onRefreshNotifications?.();
+              } else {
+                toast.error(res?.error || 'Errore nell\'aggiornamento della manutenzione');
+              }
+              return res;
+            }
+
+            const result = await (onAddMaintenance(data) as unknown as Promise<{ success: boolean; error?: string; deduped?: boolean }>);
+            if (result && result.success) {
+              toast.success(result.deduped ? 'Manutenzione già salvata in precedenza' : 'Manutenzione aggiunta con successo');
+              setMaintenanceModal(null);
               onRefreshNotifications?.();
             } else {
-              setMaintenanceError((result as any)?.error || 'Errore nell\'aggiunta della manutenzione');
+              toast.error(result?.error || 'Errore nell\'aggiunta della manutenzione');
             }
+            return result;
           }}
-          onCancel={() => setShowAddMaintenance(false)}
+          onCancel={() => setMaintenanceModal(null)}
         />
-      )}
-
-      {/* Maintenance Info Modal */}
-      {maintenanceInfoId && (
-        <Modal onClose={() => setMaintenanceInfoId(null)} labelledBy="maintenance-info-title" className="max-w-xl">
-            <div className="p-6">
-              {(() => {
-                const item = maintenances.find(m => m.id === maintenanceInfoId);
-                if (!item) return null;
-                const current = vehicle.currentMileage ?? 0;
-                const kmUntil = typeof item.nextMileage === 'number' ? (item.nextMileage - current) : undefined;
-                const status = item.nextDue
-                  ? (() => {
-                      const today = new Date();
-                      const nextDue = new Date(item.nextDue);
-                      const diffDays = Math.ceil((nextDue.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                      return diffDays < 0 ? 'expired' : (diffDays <= 7 ? 'critical' : (diffDays <= 30 ? 'warning' : 'safe'));
-                    })()
-                  : (typeof kmUntil === 'number'
-                      ? (kmUntil <= 0 ? 'expired' : (kmUntil <= 250 ? 'critical' : (kmUntil <= 600 ? 'warning' : 'safe')))
-                      : 'safe');
-                return (
-                  <>
-                    <div className="flex items-start justify-between mb-4">
-                      <h3 id="maintenance-info-title" className="text-lg font-semibold text-gray-900">Dettagli Manutenzione</h3>
-                      <button className="text-gray-500 hover:text-gray-700" onClick={() => setMaintenanceInfoId(null)}>Chiudi</button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Titolo</p>
-                        <p className="text-sm text-gray-900">{item.title}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Tipo</p>
-                        <p className="text-sm text-gray-900">{
-                          ({ oil: 'Cambio olio', filters: 'Filtri', brakes: 'Freni', tires: 'Cambio pneumatici', adblue: 'AdBlue', other: 'Manutenzione' } as Record<string, string>)[item.type] || 'Manutenzione'
-                        }</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Data</p>
-                        <p className="text-sm text-gray-900">{formatDate(item.date)}</p>
-                      </div>
-                      {item.mileage && (
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Km veicolo all'intervento</p>
-                          <p className="text-sm text-gray-900">{item.mileage.toLocaleString()} km</p>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Costo</p>
-                        <p className="text-sm text-gray-900">€{item.cost.toFixed(2)}</p>
-                      </div>
-                      {item.location && (
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Luogo</p>
-                          <p className="text-sm text-gray-900">{item.location}</p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {(item.nextDue || typeof item.nextMileage === 'number') && (
-                      <div className="bg-blue-50 p-3 rounded-lg mb-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-blue-900">Prossima Scadenza</p>
-                            {item.nextDue ? (
-                              <p className="text-sm text-blue-700">{formatDate(item.nextDue)}</p>
-                            ) : (
-                              <p className="text-sm text-blue-700">
-                                Km rimanenti: {Math.max(0, (item.nextMileage! - current)).toLocaleString()} km
-                              </p>
-                            )}
-                          </div>
-                          {typeof item.nextMileage === 'number' && (
-                            <div className="text-right">
-                              <p className="text-sm font-medium text-blue-900">A</p>
-                              <p className="text-sm text-blue-700">{item.nextMileage.toLocaleString()} km</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="mt-3">
-                          <StatusBadge status={status as any}>
-                            {(status === 'expired') ? 'SCADUTA' : (status === 'critical') ? 'URGENTE' : (status === 'warning') ? 'IN SCADENZA' : 'OK'}
-                          </StatusBadge>
-                        </div>
-                      </div>
-                    )}
-                    {item.description && (
-                      <div className="bg-gray-50 p-3 rounded-lg mb-4">
-                        <p className="text-sm font-medium text-gray-700 mb-1">Descrizione</p>
-                        <p className="text-sm text-gray-900">{item.description}</p>
-                      </div>
-                    )}
-                    {item.notes && (
-                      <div className="bg-gray-50 p-3 rounded-lg mb-4">
-                        <p className="text-sm font-medium text-gray-700 mb-1">Note</p>
-                        <p className="text-sm text-gray-900">{item.notes}</p>
-                      </div>
-                    )}
-                    <div className="text-right">
-                      <Button variant="outline" onClick={() => setMaintenanceInfoId(null)}>Chiudi</Button>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-        </Modal>
       )}
     </div>
   );

@@ -64,6 +64,60 @@ const vehicleCreateSchema = z.object({
 
 const vehicleUpdateSchema = vehicleCreateSchema.partial();
 
+const dateOnlyField = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non valida (formato AAAA-MM-GG)');
+
+// Stringa opzionale: null/stringa vuota vengono normalizzati a null (campo "vuoto"),
+// così un edit può cancellare esplicitamente un valore precedente.
+const optionalTextField = (maxLen) => z
+  .string()
+  .trim()
+  .max(maxLen, `Testo troppo lungo (max ${maxLen} caratteri)`)
+  .nullable()
+  .optional()
+  .transform((v) => (v ? v : null));
+
+const optionalNonNegativeInt = z
+  .number()
+  .int('Deve essere un numero intero')
+  .min(0, 'Non può essere negativo')
+  .max(10_000_000, 'Valore troppo grande')
+  .nullable()
+  .optional();
+
+const optionalNonNegativeAmount = z
+  .number()
+  .min(0, 'Non può essere negativo')
+  .max(1_000_000, 'Valore troppo grande')
+  .nullable()
+  .optional();
+
+// Validazione strutturale (formati/lunghezze); la mappa tipo-UI → tipo-DB e il
+// controllo di duplicati restano nella route, dove serve accesso al DB.
+const maintenanceCreateSchema = z.object({
+  type: z
+    .string({ error: 'Il tipo di manutenzione è obbligatorio' })
+    .trim()
+    .min(1, 'Il tipo di manutenzione è obbligatorio')
+    .max(30, 'Tipo manutenzione non valido'),
+  title: optionalTextField(255),
+  description: optionalTextField(2000),
+  location: optionalTextField(255),
+  notes: optionalTextField(2000),
+  lastMaintenance: dateOnlyField,
+  lastMileage: optionalNonNegativeInt,
+  nextMaintenance: dateOnlyField.nullable().optional(),
+  nextMileage: optionalNonNegativeInt,
+  cost: optionalNonNegativeAmount,
+});
+
+const maintenanceUpdateSchema = maintenanceCreateSchema.partial().extend({
+  clearNextMaintenance: z.boolean().optional(),
+  clearNextMileage: z.boolean().optional(),
+});
+
 // Middleware di validazione: sostituisce req.body con i dati validati/normalizzati
 const validate = (schema) => (req, res, next) => {
   const result = schema.safeParse(req.body);
@@ -85,5 +139,7 @@ module.exports = {
   profileUpdateSchema,
   vehicleCreateSchema,
   vehicleUpdateSchema,
+  maintenanceCreateSchema,
+  maintenanceUpdateSchema,
   FUEL_TYPES,
 };

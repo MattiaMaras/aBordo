@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
-const { validate, vehicleCreateSchema, vehicleUpdateSchema } = require('../validation/schemas');
+const { validate, vehicleCreateSchema, vehicleUpdateSchema, maintenanceCreateSchema, maintenanceUpdateSchema } = require('../validation/schemas');
 
 const router = express.Router();
 
@@ -451,23 +451,38 @@ const recomputeOrDeleteNotification = async (vehicleId, type) => {
   }
 };
 
+// Mappa il tipo inviato dal client (può già essere un tipo DB, es. "belts" per "Altro")
+// sul tipo DB effettivo, e valida contro l'enum consentito dal CHECK constraint.
+const MAINTENANCE_TYPE_ALIASES = { oil: 'oil_change', filters: 'filters', brakes: 'brakes', tires: 'tires', adblue: 'adblue' };
+const VALID_DB_MAINTENANCE_TYPES = ['oil_change', 'filters', 'belts', 'brakes', 'tires', 'adblue'];
+const mapMaintenanceType = (type) => MAINTENANCE_TYPE_ALIASES[type] || type;
+const isValidMaintenanceType = (dbType) => VALID_DB_MAINTENANCE_TYPES.includes(dbType);
+
+// Forma di risposta uniforme per POST/PUT: include SEMPRE next_mileage/location/notes,
+// che in precedenza mancavano nella risposta e sparivano dalla UI finché non si ricaricava.
+const serializeMaintenance = (m) => ({
+  id: m.id.toString(),
+  vehicle_id: m.vehicle_id,
+  type: m.type,
+  title: m.title,
+  last_maintenance: m.last_maintenance,
+  last_mileage: m.last_mileage,
+  next_maintenance: m.next_maintenance,
+  next_mileage: m.next_mileage,
+  cost: m.cost,
+  description: m.description,
+  location: m.location,
+  notes: m.notes,
+  created_at: m.created_at,
+  updated_at: m.updated_at,
+});
+
 // Rotte annidate: manutenzioni per veicolo
-router.post('/:id/maintenances', async (req, res) => {
+router.post('/:id/maintenances', validate(maintenanceCreateSchema), async (req, res) => {
   try {
     const userId = req.user.id;
     const vehicleId = req.params.id;
-  const { type, title, lastMaintenance, lastMileage, nextMaintenance, nextMileage, cost, description } = req.body;
-    const nextMaintenanceDate = (typeof nextMaintenance === 'string' && nextMaintenance.trim() !== '') ? nextMaintenance : null;
-    let costVal = null;
-    if (typeof cost === 'number') {
-      costVal = Number.isFinite(cost) ? cost : null;
-    } else if (cost != null) {
-      const parsed = parseFloat(String(cost));
-      costVal = Number.isFinite(parsed) ? parsed : null;
-    }
-    const titleVal = (typeof title === 'string' && title.trim() !== '') ? title.trim() : null;
-    const descVal = (typeof description === 'string' && description.trim() !== '') ? description.trim() : null;
-    const lastMaintenanceDate = (typeof lastMaintenance === 'string' && lastMaintenance.trim() !== '') ? lastMaintenance : null;
+    const { type, title, lastMaintenance, lastMileage, nextMaintenance, nextMileage, cost, description, location, notes } = req.body;
 
     // Verifica proprietà del veicolo
     const vehicleRes = await pool.query('SELECT id FROM vehicles WHERE id = $1 AND user_id = $2', [vehicleId, userId]);
@@ -475,36 +490,39 @@ router.post('/:id/maintenances', async (req, res) => {
       return res.status(404).json({ error: 'Veicolo non trovato' });
     }
 
-    // Mappa tipi frontend -> DB
-    const typeMap = {
-      oil: 'oil_change',
-      filters: 'filters',
-      brakes: 'brakes',
-      tires: 'tires',
-      adblue: 'adblue'
-    };
-    const dbType = typeMap[type] || type;
-
-    const validTypes = ['oil_change', 'filters', 'belts', 'brakes', 'tires', 'adblue'];
-    if (!validTypes.includes(dbType)) {
+    const dbType = mapMaintenanceType(type);
+    if (!isValidMaintenanceType(dbType)) {
       return res.status(400).json({ error: 'Tipo manutenzione non valido' });
     }
 
+    const lastMileageVal = typeof lastMileage === 'number' ? lastMileage : null;
+    const nextMileageVal = typeof nextMileage === 'number' ? nextMileage : null;
+    const nextMaintenanceVal = nextMaintenance || null;
+    const costVal = typeof cost === 'number' ? cost : null;
+
+    // Previeni duplicati accidentali (doppio click sul submit, retry di rete, tab
+    // multiple): se esiste già una manutenzione identica creata negli ultimi 15
+    // secondi, restituisci quella invece di inserirne una copia.
+    const dupCheck = await pool.query(
+      `SELECT * FROM maintenances
+       WHERE vehicle_id = $1 AND type = $2
+         AND last_maintenance IS NOT DISTINCT FROM $3
+         AND last_mileage IS NOT DISTINCT FROM $4
+         AND cost IS NOT DISTINCT FROM $5
+         AND title IS NOT DISTINCT FROM $6
+         AND created_at > NOW() - INTERVAL '15 seconds'
+       ORDER BY created_at DESC LIMIT 1`,
+      [vehicleId, dbType, lastMaintenance, lastMileageVal, costVal, title || null]
+    );
+    if (dupCheck.rows.length > 0) {
+      return res.status(200).json({ ...serializeMaintenance(dupCheck.rows[0]), deduped: true });
+    }
+
     const insertRes = await pool.query(
-      `INSERT INTO maintenances (vehicle_id, type, title, last_maintenance, last_mileage, next_maintenance, next_mileage, cost, description)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO maintenances (vehicle_id, type, title, last_maintenance, last_mileage, next_maintenance, next_mileage, cost, description, location, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [
-        vehicleId,
-        dbType,
-        titleVal,
-        lastMaintenanceDate,
-        (typeof lastMileage === 'number' ? lastMileage : null),
-        nextMaintenanceDate,
-        (typeof nextMileage === 'number' ? nextMileage : null),
-        costVal,
-        descVal
-      ]
+      [vehicleId, dbType, title || null, lastMaintenance, lastMileageVal, nextMaintenanceVal, nextMileageVal, costVal, description || null, location || null, notes || null]
     );
 
     const m = insertRes.rows[0];
@@ -513,42 +531,19 @@ router.post('/:id/maintenances', async (req, res) => {
       const maintenanceLabel = (m.title && String(m.title).trim() !== '') ? m.title : labelForMaintenanceType(m.type);
       await upsertExpiryNotification(vehicleId, 'maintenance', m.next_maintenance, { maintenanceLabel, sourceType: 'maintenance', sourceId: m.id });
     } catch (e) { console.error('Notifica manutenzione (create) non aggiornata:', e); }
-    res.status(201).json({
-      id: m.id.toString(),
-      vehicle_id: m.vehicle_id,
-      type: m.type,
-      title: m.title,
-      last_maintenance: m.last_maintenance,
-      last_mileage: m.last_mileage,
-      next_maintenance: m.next_maintenance,
-      cost: m.cost,
-      description: m.description,
-      created_at: m.created_at,
-      updated_at: m.updated_at
-    });
+    res.status(201).json(serializeMaintenance(m));
   } catch (error) {
     console.error('Errore nell\'aggiunta manutenzione:', error);
     res.status(500).json({ error: 'Errore del server nell\'aggiunta manutenzione' });
   }
 });
 
-router.put('/:id/maintenances/:maintenanceId', async (req, res) => {
+router.put('/:id/maintenances/:maintenanceId', validate(maintenanceUpdateSchema), async (req, res) => {
   try {
     const userId = req.user.id;
     const vehicleId = req.params.id;
     const maintenanceId = req.params.maintenanceId;
-  const { type, title, lastMaintenance, lastMileage, nextMaintenance, nextMileage, cost, description, clearNextMaintenance, clearNextMileage } = req.body;
-    const nextMaintenanceDate = (typeof nextMaintenance === 'string' && nextMaintenance.trim() !== '') ? nextMaintenance : null;
-    const lastMaintenanceDate = (typeof lastMaintenance === 'string' && lastMaintenance.trim() !== '') ? lastMaintenance : null;
-    let costVal = undefined;
-    if (typeof cost === 'number') {
-      costVal = Number.isFinite(cost) ? cost : null;
-    } else if (cost != null) {
-      const parsed = parseFloat(String(cost));
-      costVal = Number.isFinite(parsed) ? parsed : null;
-    }
-    const titleVal = (typeof title === 'string' && title.trim() !== '') ? title.trim() : null;
-    const descVal = (typeof description === 'string' && description.trim() !== '') ? description.trim() : null;
+    const { type, title, lastMaintenance, lastMileage, nextMaintenance, nextMileage, cost, description, location, notes, clearNextMaintenance, clearNextMileage } = req.body;
 
     // Verifica che la manutenzione appartenga al veicolo dell'utente
     const checkRes = await pool.query(
@@ -562,42 +557,53 @@ router.put('/:id/maintenances/:maintenanceId', async (req, res) => {
       return res.status(404).json({ error: 'Manutenzione non trovata' });
     }
 
-    let dbType = undefined;
-    if (type) {
-      const typeMap = { oil: 'oil_change', filters: 'filters', brakes: 'brakes', tires: 'tires', adblue: 'adblue' };
-      dbType = typeMap[type] || type;
-      const validTypes = ['oil_change', 'filters', 'belts', 'brakes', 'tires', 'adblue'];
-      if (!validTypes.includes(dbType)) {
+    let dbType;
+    if (type !== undefined) {
+      dbType = mapMaintenanceType(type);
+      if (!isValidMaintenanceType(dbType)) {
         return res.status(400).json({ error: 'Tipo manutenzione non valido' });
       }
     }
 
+    // Costruzione dinamica del SET: un campo viene toccato solo se presente nel
+    // payload. A differenza del precedente UPDATE basato su COALESCE, questo
+    // permette di impostare esplicitamente un valore vuoto (es. cancellare
+    // luogo/note) invece di ignorarlo silenziosamente e perdere la modifica.
+    const sets = [];
+    const values = [];
+    const push = (col, val) => { values.push(val); sets.push(`${col} = $${values.length}`); };
+
+    if (dbType !== undefined) push('type', dbType);
+    if (title !== undefined) push('title', title || null);
+    if (description !== undefined) push('description', description || null);
+    if (location !== undefined) push('location', location || null);
+    if (notes !== undefined) push('notes', notes || null);
+    if (lastMaintenance !== undefined) push('last_maintenance', lastMaintenance);
+    if (lastMileage !== undefined) push('last_mileage', lastMileage);
+    if (cost !== undefined) push('cost', cost);
+
+    if (clearNextMaintenance) {
+      push('next_maintenance', null);
+    } else if (nextMaintenance !== undefined) {
+      push('next_maintenance', nextMaintenance);
+    }
+
+    if (clearNextMileage) {
+      push('next_mileage', null);
+    } else if (nextMileage !== undefined) {
+      push('next_mileage', nextMileage);
+    }
+
+    if (sets.length === 0) {
+      return res.status(400).json({ error: 'Nessun campo valido da aggiornare' });
+    }
+
+    sets.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(maintenanceId);
+
     const updateRes = await pool.query(
-      `UPDATE maintenances
-       SET type = COALESCE($1, type),
-           title = COALESCE($2, title),
-           last_maintenance = COALESCE($3, last_maintenance),
-           last_mileage = COALESCE($4, last_mileage),
-           next_maintenance = CASE WHEN $9 THEN NULL ELSE COALESCE($5, next_maintenance) END,
-           next_mileage = CASE WHEN $10 THEN NULL ELSE COALESCE($6, next_mileage) END,
-           cost = COALESCE($7, cost),
-           description = COALESCE($8, description),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $11
-       RETURNING *`,
-      [
-        dbType || null,
-        titleVal || null,
-        lastMaintenanceDate || null,
-        (typeof lastMileage === 'number' ? lastMileage : null),
-        nextMaintenanceDate || null,
-        (typeof nextMileage === 'number' ? nextMileage : null),
-        costVal ?? null,
-        descVal ?? null,
-        !!clearNextMaintenance,
-        !!clearNextMileage,
-        maintenanceId,
-      ]
+      `UPDATE maintenances SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`,
+      values
     );
 
     const m = updateRes.rows[0];
@@ -610,19 +616,7 @@ router.put('/:id/maintenances/:maintenanceId', async (req, res) => {
         await pool.query(`DELETE FROM notifications WHERE vehicle_id = $1 AND type = 'maintenance' AND source_type = 'maintenance' AND source_id = $2`, [vehicleId, maintenanceId]);
       }
     } catch (e) { console.error('Notifica manutenzione (update) non aggiornata:', e); }
-    res.json({
-      id: m.id.toString(),
-      vehicle_id: m.vehicle_id,
-      type: m.type,
-      title: m.title,
-      last_maintenance: m.last_maintenance,
-      last_mileage: m.last_mileage,
-      next_maintenance: m.next_maintenance,
-      cost: m.cost,
-      description: m.description,
-      created_at: m.created_at,
-      updated_at: m.updated_at
-    });
+    res.json(serializeMaintenance(m));
   } catch (error) {
     console.error('Errore nell\'aggiornamento manutenzione:', error);
     res.status(500).json({ error: 'Errore del server nell\'aggiornamento manutenzione' });

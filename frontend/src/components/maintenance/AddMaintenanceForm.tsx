@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Calendar, MapPin, Euro, FileText } from 'lucide-react';
+import { X, Calendar, MapPin, Euro, FileText, Gauge } from 'lucide-react';
 import { Button } from '../common/Button';
 import { Modal } from '../common/Modal';
 import { MaintenanceRecord, MAINTENANCE_TYPES } from '../../types/maintenance';
@@ -8,43 +8,59 @@ import { Vehicle } from '../../types/vehicle';
 
 interface AddMaintenanceFormProps {
   vehicle: Vehicle;
-  onSubmit: (maintenance: Omit<MaintenanceRecord, 'id'>) => void;
+  /** Se presente, il form si apre in modalità modifica precompilato con questi dati */
+  initialData?: MaintenanceRecord;
+  onSubmit: (maintenance: Omit<MaintenanceRecord, 'id'>) => Promise<{ success: boolean; error?: string }> | void;
   onCancel: () => void;
   errorMessage?: string;
 }
 
-export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({ 
-  vehicle, 
-  onSubmit, 
+const MAINTENANCE_TYPE_OPTIONS = MAINTENANCE_TYPES.filter(t =>
+  ['oil', 'filters', 'brakes', 'tires', 'adblue', 'other'].includes(t.id)
+);
+
+export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
+  vehicle,
+  initialData,
+  onSubmit,
   onCancel,
   errorMessage
 }) => {
+  const isEditMode = Boolean(initialData);
+
   const [formData, setFormData] = useState({
-    type: 'oil' as MaintenanceRecord['type'],
-    title: '',
-    description: '',
-    date: toInputDate(new Date()),
-    nextDue: '',
-    mileage: vehicle.currentMileage,
-    nextMileage: 0,
-    cost: 0,
-    location: '',
-    notes: '',
-    isRecurring: true,
+    type: initialData?.type ?? ('oil' as MaintenanceRecord['type']),
+    title: initialData?.title && initialData.title !== 'Manutenzione' ? initialData.title : '',
+    description: initialData?.description ?? '',
+    date: initialData?.date ? toInputDate(new Date(initialData.date)) : toInputDate(new Date()),
+    nextDue: initialData?.nextDue ? toInputDate(new Date(initialData.nextDue)) : '',
+    mileage: initialData?.mileage ?? vehicle.currentMileage,
+    nextMileage: initialData?.nextMileage ?? 0,
+    cost: initialData?.cost ?? 0,
+    location: initialData?.location ?? '',
+    notes: initialData?.notes ?? '',
+    // Il calcolo automatico della prossima scadenza è utile solo in creazione;
+    // in modifica l'utente edita direttamente i valori già salvati.
+    isRecurring: !isEditMode,
     intervalType: 'kilometers' as 'days' | 'months' | 'kilometers',
     intervalValue: 5000,
     reminderDays: [30, 14, 7]
   });
-  const [isNextDueManual, setIsNextDueManual] = useState(false);
+  const [isNextDueManual, setIsNextDueManual] = useState(isEditMode);
+  // Disabilita il pulsante durante l'invio: previene i duplicati causati da
+  // doppio click o doppia pressione di Invio sullo stesso form.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  const selectedType = MAINTENANCE_TYPES.find(t => t.id === formData.type);
+  const selectedType = MAINTENANCE_TYPE_OPTIONS.find(t => t.id === formData.type);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    let nextDue = formData.nextDue || undefined;
-    let nextMileage = formData.nextMileage || undefined;
-    if (formData.isRecurring && formData.intervalType === 'kilometers') {
+    if (isSubmitting) return; // guardia anti-doppio-submit
+
+    let nextDue: string | undefined = formData.nextDue || undefined;
+    let nextMileage: number | undefined = formData.nextMileage || undefined;
+    if (!isEditMode && formData.isRecurring && formData.intervalType === 'kilometers') {
       const baseMileage = (typeof formData.mileage === 'number' ? formData.mileage : (vehicle.currentMileage ?? 0)) || 0;
       const interval = typeof formData.intervalValue === 'number' ? formData.intervalValue : 0;
       nextMileage = baseMileage + interval;
@@ -63,13 +79,24 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
       cost: formData.cost,
       location: formData.location || undefined,
       notes: formData.notes || undefined,
-      isRecurring: formData.isRecurring,
-      intervalType: formData.isRecurring ? formData.intervalType : undefined,
-      intervalValue: formData.isRecurring ? formData.intervalValue : undefined,
+      isRecurring: !isEditMode && formData.isRecurring,
+      intervalType: (!isEditMode && formData.isRecurring) ? formData.intervalType : undefined,
+      intervalValue: (!isEditMode && formData.isRecurring) ? formData.intervalValue : undefined,
       reminderDays: formData.reminderDays
     };
 
-    onSubmit(maintenance);
+    setIsSubmitting(true);
+    setLocalError(null);
+    try {
+      const result = await onSubmit(maintenance);
+      // Se onSubmit non ritorna un esito (void), consideriamo l'operazione conclusa
+      // e lasciamo che sia il chiamante a chiudere il form.
+      if (result && result.success === false) {
+        setLocalError(result.error || 'Operazione non riuscita');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -99,11 +126,12 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
   };
 
   const handleTypeChange = (newType: MaintenanceRecord['type']) => {
-    const typeConfig = MAINTENANCE_TYPES.find(t => t.id === newType);
+    const typeConfig = MAINTENANCE_TYPE_OPTIONS.find(t => t.id === newType);
     setFormData(prev => ({
       ...prev,
       type: newType,
-      title: '',
+      // In modifica manteniamo il titolo esistente: cambiare tipo non deve svuotarlo
+      title: isEditMode ? prev.title : '',
       intervalType: typeConfig?.defaultIntervalType || 'kilometers',
       intervalValue: typeConfig?.defaultInterval || 5000,
       reminderDays: typeConfig?.defaultReminderDays || [30, 14, 7]
@@ -114,50 +142,58 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
     if (!formData.isRecurring || !formData.intervalValue) return;
 
     const currentDate = new Date(formData.date);
-    let nextDate = new Date(currentDate);
+    const nextDate = new Date(currentDate);
 
-  switch (formData.intervalType) {
-    case 'days':
-      nextDate.setDate(currentDate.getDate() + formData.intervalValue);
-      break;
-    case 'months':
-      nextDate.setMonth(currentDate.getMonth() + formData.intervalValue);
-      break;
-    case 'kilometers':
-      const baseMileage = formData.mileage || 0;
-      const targetMileage = baseMileage + formData.intervalValue;
-      // In modalità chilometri, la data non è usata e non deve restare bloccata manualmente
-      setIsNextDueManual(false);
-      setFormData(prev => ({
-        ...prev,
-        nextDue: '',
-        nextMileage: targetMileage
-      }));
-      return;
-  }
+    switch (formData.intervalType) {
+      case 'days':
+        nextDate.setDate(currentDate.getDate() + formData.intervalValue);
+        break;
+      case 'months':
+        nextDate.setMonth(currentDate.getMonth() + formData.intervalValue);
+        break;
+      case 'kilometers': {
+        const baseMileage = formData.mileage || 0;
+        const targetMileage = baseMileage + formData.intervalValue;
+        // In modalità chilometri, la data non è usata e non deve restare bloccata manualmente
+        setIsNextDueManual(false);
+        setFormData(prev => ({
+          ...prev,
+          nextDue: '',
+          nextMileage: targetMileage
+        }));
+        return;
+      }
+    }
 
-  setFormData(prev => ({
-    ...prev,
-    // Aggiorna dinamicamente solo se non impostato manualmente
-    nextDue: isNextDueManual ? prev.nextDue : toInputDate(nextDate),
-    nextMileage: formData.intervalType === 'kilometers' 
-      ? (formData.mileage || 0) + formData.intervalValue 
-      : 0
-  }));
+    setFormData(prev => ({
+      ...prev,
+      // Aggiorna dinamicamente solo se non impostato manualmente
+      nextDue: isNextDueManual ? prev.nextDue : toInputDate(nextDate),
+      nextMileage: formData.intervalType === 'kilometers'
+        ? (formData.mileage || 0) + formData.intervalValue
+        : 0
+    }));
   };
 
   React.useEffect(() => {
-    if (formData.isRecurring) {
+    // Il calcolo automatico ha senso solo in creazione: in modifica l'utente
+    // controlla direttamente "Prossima scadenza" e "Prossimo chilometraggio".
+    if (!isEditMode && formData.isRecurring) {
       calculateNextDue();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.date, formData.intervalType, formData.intervalValue, formData.mileage]);
+
+  const modalTitle = isEditMode
+    ? `Modifica Manutenzione - ${vehicle.brand} ${vehicle.model}`
+    : `Aggiungi Manutenzione - ${vehicle.brand} ${vehicle.model}`;
 
   return (
     <Modal onClose={onCancel} labelledBy="add-maintenance-title" className="max-w-2xl max-h-[90vh] overflow-y-auto" closeOnBackdrop={false}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 id="add-maintenance-title" className="text-xl font-semibold text-gray-900">
-              Aggiungi Manutenzione - {vehicle.brand} {vehicle.model}
+              {modalTitle}
             </h2>
             <button
               onClick={onCancel}
@@ -167,7 +203,7 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
               <X className="h-6 w-6" aria-hidden="true" />
             </button>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Tipo Manutenzione */}
             <div>
@@ -175,7 +211,7 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
                 Tipo Manutenzione
               </label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {MAINTENANCE_TYPES.filter(t => ['oil','filters','brakes','tires','adblue','other'].includes(t.id)).map((type) => (
+                {MAINTENANCE_TYPE_OPTIONS.map((type) => (
                   <button
                     key={type.id}
                     type="button"
@@ -192,20 +228,21 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
               </div>
             </div>
 
-            {errorMessage && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded">
-                {errorMessage}
+            {(errorMessage || localError) && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded" role="alert">
+                {errorMessage || localError}
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Titolo */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="maintenance-title" className="block text-sm font-medium text-gray-700 mb-1">
                   Titolo
                 </label>
                 <input
                   type="text"
+                  id="maintenance-title"
                   name="title"
                   value={formData.title}
                   onChange={handleChange}
@@ -216,13 +253,14 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
 
               {/* Data */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="maintenance-date" className="block text-sm font-medium text-gray-700 mb-1">
                   Data Esecuzione
                 </label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" aria-hidden="true" />
                   <input
                     type="date"
+                    id="maintenance-date"
                     name="date"
                     value={formData.date}
                     onChange={handleChange}
@@ -236,11 +274,12 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
             {/* Chilometraggio e Costo */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="maintenance-mileage" className="block text-sm font-medium text-gray-700 mb-1">
                   Chilometraggio
                 </label>
                 <input
                   type="number"
+                  id="maintenance-mileage"
                   name="mileage"
                   value={formData.mileage}
                   onChange={handleChange}
@@ -251,13 +290,14 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="maintenance-cost" className="block text-sm font-medium text-gray-700 mb-1">
                   Costo (€)
                 </label>
                 <div className="relative">
-                  <Euro className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Euro className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" aria-hidden="true" />
                   <input
                     type="number"
+                    id="maintenance-cost"
                     name="cost"
                     value={formData.cost}
                     onChange={handleChange}
@@ -272,13 +312,14 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
 
             {/* Luogo */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="maintenance-location" className="block text-sm font-medium text-gray-700 mb-1">
                 Luogo/Officina
               </label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" aria-hidden="true" />
                 <input
                   type="text"
+                  id="maintenance-location"
                   name="location"
                   value={formData.location}
                   onChange={handleChange}
@@ -290,12 +331,13 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
 
             {/* Descrizione */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="maintenance-description" className="block text-sm font-medium text-gray-700 mb-1">
                 Descrizione
               </label>
               <div className="relative">
-                <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <FileText className="absolute left-3 top-3 h-5 w-5 text-gray-400" aria-hidden="true" />
                 <textarea
+                  id="maintenance-description"
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
@@ -306,92 +348,140 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
               </div>
             </div>
 
-            {/* Manutenzione Ricorrente */}
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center mb-4">
-                <input
-                  type="checkbox"
-                  name="isRecurring"
-                  checked={formData.isRecurring}
-                  onChange={handleChange}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <label className="ml-2 text-sm font-medium text-gray-700">
-                  Manutenzione ricorrente (programma la prossima)
-                </label>
-              </div>
-              <p className="text-xs text-gray-500 mb-3">Imposta l'intervallo per pianificare un promemoria del prossimo intervento. Se scegli "Chilometri" puoi inserire anche i "Prossimi Km"; sono promemoria e non vengono salvati nel database.</p>
+            {!isEditMode ? (
+              /* Manutenzione Ricorrente: calcolatore automatico, solo in creazione */
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center mb-4">
+                  <input
+                    type="checkbox"
+                    id="maintenance-recurring"
+                    name="isRecurring"
+                    checked={formData.isRecurring}
+                    onChange={handleChange}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="maintenance-recurring" className="ml-2 text-sm font-medium text-gray-700">
+                    Manutenzione ricorrente (programma la prossima)
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">Imposta l'intervallo per pianificare un promemoria del prossimo intervento. Se scegli "Chilometri" puoi inserire anche i "Prossimi Km"; sono promemoria e non vengono salvati nel database.</p>
 
-              {formData.isRecurring && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Intervallo
-                      </label>
-                      <input
-                        type="number"
-                        name="intervalValue"
-                        value={formData.intervalValue}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">Numero di chilometri/mesi/giorni tra un intervento e il successivo.</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tipo
-                      </label>
-                      <select
-                        name="intervalType"
-                        value={formData.intervalType}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="kilometers">Chilometri</option>
-                        <option value="months">Mesi</option>
-                        <option value="days">Giorni</option>
-                      </select>
-                      <p className="mt-1 text-xs text-gray-500">Scegli se l'intervallo è in km, mesi o giorni.</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    {formData.intervalType !== 'kilometers' && (
+                {formData.isRecurring && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Prossima Scadenza
+                        <label htmlFor="maintenance-interval-value" className="block text-sm font-medium text-gray-700 mb-1">
+                          Intervallo
                         </label>
                         <input
-                          type="date"
-                          name="nextDue"
-                          value={formData.nextDue}
+                          type="number"
+                          id="maintenance-interval-value"
+                          name="intervalValue"
+                          value={formData.intervalValue}
                           onChange={handleChange}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
+                        <p className="mt-1 text-xs text-gray-500">Numero di chilometri/mesi/giorni tra un intervento e il successivo.</p>
                       </div>
-                    )}
-                    {formData.intervalType === 'kilometers' && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Prossima Scadenza (chilometri)
+                        <label htmlFor="maintenance-interval-type" className="block text-sm font-medium text-gray-700 mb-1">
+                          Tipo
                         </label>
-                        <p className="text-sm text-blue-700">
-                          A {((formData.mileage || 0) + (formData.intervalValue || 0)).toLocaleString()} km • Km rimanenti: {Math.max(0, ((formData.mileage || 0) + (formData.intervalValue || 0)) - (vehicle.currentMileage ?? 0)).toLocaleString()} km
-                        </p>
+                        <select
+                          id="maintenance-interval-type"
+                          name="intervalType"
+                          value={formData.intervalType}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="kilometers">Chilometri</option>
+                          <option value="months">Mesi</option>
+                          <option value="days">Giorni</option>
+                        </select>
+                        <p className="mt-1 text-xs text-gray-500">Scegli se l'intervallo è in km, mesi o giorni.</p>
                       </div>
-                    )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {formData.intervalType !== 'kilometers' && (
+                        <div>
+                          <label htmlFor="maintenance-next-due" className="block text-sm font-medium text-gray-700 mb-1">
+                            Prossima Scadenza
+                          </label>
+                          <input
+                            type="date"
+                            id="maintenance-next-due"
+                            name="nextDue"
+                            value={formData.nextDue}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      )}
+                      {formData.intervalType === 'kilometers' && (
+                        <div>
+                          <span className="block text-sm font-medium text-gray-700 mb-1">
+                            Prossima Scadenza (chilometri)
+                          </span>
+                          <p className="text-sm text-blue-700">
+                            A {((formData.mileage || 0) + (formData.intervalValue || 0)).toLocaleString()} km • Km rimanenti: {Math.max(0, ((formData.mileage || 0) + (formData.intervalValue || 0)) - (vehicle.currentMileage ?? 0)).toLocaleString()} km
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Modifica: prossima scadenza modificabile direttamente, senza ricalcolo automatico */
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm font-medium text-gray-700 mb-3">Prossima Scadenza</p>
+                <p className="text-xs text-gray-500 mb-3">Modifica direttamente data o chilometraggio della prossima scadenza, oppure svuota entrambi i campi per rimuoverla.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="maintenance-next-due-edit" className="block text-sm font-medium text-gray-700 mb-1">
+                      Data
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" aria-hidden="true" />
+                      <input
+                        type="date"
+                        id="maintenance-next-due-edit"
+                        name="nextDue"
+                        value={formData.nextDue}
+                        onChange={handleChange}
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="maintenance-next-mileage-edit" className="block text-sm font-medium text-gray-700 mb-1">
+                      Chilometraggio
+                    </label>
+                    <div className="relative">
+                      <Gauge className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" aria-hidden="true" />
+                      <input
+                        type="number"
+                        id="maintenance-next-mileage-edit"
+                        name="nextMileage"
+                        value={formData.nextMileage || ''}
+                        onChange={handleChange}
+                        placeholder="0"
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Note */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="maintenance-notes" className="block text-sm font-medium text-gray-700 mb-1">
                 Note Aggiuntive
               </label>
               <textarea
+                id="maintenance-notes"
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}
@@ -400,12 +490,12 @@ export const AddMaintenanceForm: React.FC<AddMaintenanceFormProps> = ({
                 placeholder="Note, osservazioni, raccomandazioni..."
               />
             </div>
-            
+
             <div className="flex space-x-3 pt-4">
-              <Button type="submit" className="flex-1">
-                Salva Manutenzione
+              <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                {isSubmitting ? 'Salvataggio...' : (isEditMode ? 'Salva Modifiche' : 'Salva Manutenzione')}
               </Button>
-              <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
+              <Button type="button" variant="outline" onClick={onCancel} className="flex-1" disabled={isSubmitting}>
                 Annulla
               </Button>
             </div>

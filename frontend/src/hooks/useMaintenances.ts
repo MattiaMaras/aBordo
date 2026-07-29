@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MaintenanceRecord } from '../types/maintenance';
 import { API_URL, apiFetch, getAuthHeaders } from '../api/client';
 
@@ -8,6 +8,11 @@ export const useMaintenances = (vehicleId: string) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Guardie anti-doppio-submit: evitano che un doppio click o un doppio invio
+  // del form (oltre alla protezione già presente sul bottone) generino due
+  // richieste POST/PUT in parallelo per la stessa manutenzione.
+  const addInFlight = useRef(false);
+  const updateInFlight = useRef<Set<string>>(new Set());
 
   // Fetch maintenances for specific vehicle
   const fetchMaintenances = useCallback(async () => {
@@ -41,6 +46,10 @@ export const useMaintenances = (vehicleId: string) => {
 
   // Add new maintenance
   const addMaintenance = async (maintenanceData: Omit<MaintenanceRecord, 'id'>) => {
+    if (addInFlight.current) {
+      return { success: false, error: 'Salvataggio già in corso' };
+    }
+    addInFlight.current = true;
     try {
       setError(null);
 
@@ -50,24 +59,35 @@ export const useMaintenances = (vehicleId: string) => {
         body: JSON.stringify(mapRecordToDbPayload(maintenanceData)),
       });
 
+      const payload = await response.json();
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Errore nell\'aggiunta della manutenzione');
+        throw new Error(payload.error || 'Errore nell\'aggiunta della manutenzione');
       }
 
-      const newMaintenance = await response.json();
-      setMaintenances(prev => [...prev, mapDbMaintenanceToRecord(newMaintenance)]);
-      
-      return { success: true };
+      const newMaintenance = mapDbMaintenanceToRecord(payload);
+      setMaintenances(prev => {
+        // Se il backend ha deduplicato (stessa manutenzione già salvata pochi
+        // secondi prima), evita di aggiungerla due volte anche lato client.
+        if (prev.some(m => m.id === newMaintenance.id)) return prev;
+        return [...prev, newMaintenance];
+      });
+
+      return { success: true, deduped: Boolean(payload.deduped) };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
       setError(errorMessage);
       return { success: false, error: errorMessage };
+    } finally {
+      addInFlight.current = false;
     }
   };
 
   // Update maintenance
   const updateMaintenance = async (maintenanceId: string, maintenanceData: Partial<Omit<MaintenanceRecord, 'id'>>) => {
+    if (updateInFlight.current.has(maintenanceId)) {
+      return { success: false, error: 'Aggiornamento già in corso' };
+    }
+    updateInFlight.current.add(maintenanceId);
     try {
       setError(null);
 
@@ -84,12 +104,14 @@ export const useMaintenances = (vehicleId: string) => {
 
       const updatedMaintenance = await response.json();
       setMaintenances(prev => prev.map(m => m.id === maintenanceId ? mapDbMaintenanceToRecord(updatedMaintenance) : m));
-      
+
       return { success: true };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
       setError(errorMessage);
       return { success: false, error: errorMessage };
+    } finally {
+      updateInFlight.current.delete(maintenanceId);
     }
   };
 
@@ -109,7 +131,7 @@ export const useMaintenances = (vehicleId: string) => {
       }
 
       setMaintenances(prev => prev.filter(m => m.id !== maintenanceId));
-      
+
       return { success: true };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
@@ -148,8 +170,8 @@ export const useMaintenances = (vehicleId: string) => {
       mileage: typeof db.last_mileage === 'number' ? db.last_mileage : (typeof db.mileage === 'number' ? db.mileage : undefined),
       nextMileage: typeof db.next_mileage === 'number' ? db.next_mileage : undefined,
       cost: typeof db.cost === 'number' ? db.cost : (parseFloat(db.cost ?? '0') || 0),
-      location: undefined,
-      notes: undefined,
+      location: db.location ?? undefined,
+      notes: db.notes ?? undefined,
       documents: undefined,
       reminderDays: undefined,
       isRecurring: false,
@@ -183,6 +205,8 @@ export const useMaintenances = (vehicleId: string) => {
       description: (rec.description && rec.description.trim().length > 0)
         ? rec.description.trim()
         : null,
+      location: (rec.location && rec.location.trim().length > 0) ? rec.location.trim() : null,
+      notes: (rec.notes && rec.notes.trim().length > 0) ? rec.notes.trim() : null,
     };
   }
 

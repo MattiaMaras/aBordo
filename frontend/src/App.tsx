@@ -257,7 +257,15 @@ const Dashboard: React.FC = () => {
           return res as any;
         }}
         onRefreshNotifications={async () => { await refreshNotifications(); await loadMaintenances(); }}
-        onUpdateMaintenance={updateMaintenance}
+        onUpdateMaintenance={async (id, data) => {
+          const res = await updateMaintenance(id, data);
+          if ((res as any)?.success) {
+            await refreshNotifications();
+            setCostsRefreshToken(prev => prev + 1);
+            await loadMaintenances();
+          }
+          return res as any;
+        }}
         onDeleteMaintenance={async (id) => {
           const res = await deleteMaintenance(id);
           if (res && res.success) {

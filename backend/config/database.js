@@ -139,6 +139,8 @@ const createTables = async () => {
         next_mileage INTEGER,
         cost DECIMAL(10,2),
         description TEXT,
+        location VARCHAR(255),
+        notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -168,6 +170,19 @@ const createTables = async () => {
     // Aggiungi colonna last_mileage se non esiste
     try {
       await pool.query(`ALTER TABLE maintenances ADD COLUMN IF NOT EXISTS last_mileage INTEGER`);
+    } catch (e) {
+      // Ignora errori non critici
+    }
+
+    // Aggiungi colonne location/notes se non esistono: erano raccolte dal form
+    // ma mai salvate, causando perdita silenziosa di questi dati alla creazione.
+    try {
+      await pool.query(`ALTER TABLE maintenances ADD COLUMN IF NOT EXISTS location VARCHAR(255)`);
+    } catch (e) {
+      // Ignora errori non critici
+    }
+    try {
+      await pool.query(`ALTER TABLE maintenances ADD COLUMN IF NOT EXISTS notes TEXT`);
     } catch (e) {
       // Ignora errori non critici
     }
