@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { Car } from 'lucide-react';
 import { HeroSection } from './HeroSection';
-import { ProblemsSection } from './ProblemsSection';
 import { FeaturesSection } from './FeaturesSection';
-import { PricingSection } from './PricingSection';
 import { FAQSection } from './FAQSection';
 import { CTASection } from './CTASection';
 import { LoginForm } from '../auth/LoginForm';
@@ -123,10 +121,7 @@ export const LandingPage: React.FC = () => {
 
       {/* Landing Page Sections */}
       <HeroSection onGetStarted={handleGetStarted} />
-      <ProblemsSection />
       <FeaturesSection />
-      
-      <PricingSection onGetStarted={handleGetStarted} />
       <FAQSection />
       <CTASection onGetStarted={handleGetStarted} />
 
