@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Car } from 'lucide-react';
 import { HeroSection } from './HeroSection';
+import { canUseHero3D } from './hero3d/support';
+
+// Three.js è pesante: si carica solo per la landing e solo se il dispositivo lo supporta
+const Hero3D = lazy(() => import('./hero3d/Hero3D'));
 import { FeaturesSection } from './FeaturesSection';
 import { TrackedSection } from './TrackedSection';
 import { AlertsSection } from './AlertsSection';
@@ -13,6 +17,7 @@ import { SignIn, SignUp } from '@clerk/clerk-react';
 import { CLERK_ENABLED } from '../../api/clerkConfig';
 
 export const LandingPage: React.FC = () => {
+  const [use3D] = useState(canUseHero3D);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
 
@@ -123,7 +128,13 @@ export const LandingPage: React.FC = () => {
       </nav>
 
       {/* Landing Page Sections */}
-      <HeroSection onGetStarted={handleGetStarted} />
+      {use3D ? (
+        <Suspense fallback={<HeroSection onGetStarted={handleGetStarted} />}>
+          <Hero3D onGetStarted={handleGetStarted} />
+        </Suspense>
+      ) : (
+        <HeroSection onGetStarted={handleGetStarted} />
+      )}
       <TrackedSection />
       <FeaturesSection />
       <AlertsSection />
