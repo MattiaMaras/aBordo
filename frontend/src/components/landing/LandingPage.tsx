@@ -181,6 +181,7 @@ export const LandingPage: React.FC = () => {
           
           <div className="border-t border-gray-200 mt-8 pt-8 text-center text-gray-400">
             <p>&copy; {new Date().getFullYear()} A Bordo. Tutti i diritti riservati.</p>
+            <p className="mt-2 text-xs text-gray-500">Modello 3D: Ferrari 458 Italia di <a href="https://sketchfab.com/models/57bf6cc56931426e87494f554df1dab6" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-900">vicent091036</a> (Sketchfab).</p>
           </div>
         </div>
       </footer>

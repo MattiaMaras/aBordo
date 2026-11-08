@@ -1,9 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '../../common/Button';
-import { buildCar, buildStage, LIME } from './carModel';
+import { buildCar, buildStage, LIME, type Anchor } from './carModel';
+
+// Modello 3D reale (credito nel footer). Orientamento: se il muso guardasse dalla parte sbagliata, cambia questo valore.
+const MODEL_URL = '/models/ferrari.glb';
+const MODEL_YAW = -Math.PI / 2;
+const MODEL_LENGTH = 4.4;
+
+// Posizione dei punti come frazioni della scatola dell'auto: [lunghezza, altezza, larghezza]
+const ANCHOR_FRACTIONS: Record<string, { at: [number, number, number]; normal: [number, number, number] }> = {
+  tagliando: { at: [0.72, 0.6, 0], normal: [0, 1, 0.2] },
+  revisione: { at: [0.3, 0.88, 0], normal: [0.3, 1, 0] },
+  assicurazione: { at: [0, 0.6, 1.02], normal: [0, 0, 1] },
+  gomme: { at: [0.58, 0.22, 1.02], normal: [0, 0, 1] },
+  freni: { at: [-0.58, 0.22, 1.02], normal: [0, 0, 1] },
+  adblue: { at: [-1.0, 0.55, 0], normal: [-1, 0.2, 0] },
+};
 
 interface Props { onGetStarted: () => void }
 
@@ -59,7 +76,7 @@ const Hero3D: React.FC<Props> = ({ onGetStarted }) => {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
+    renderer.toneMappingExposure = 0.95;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.appendChild(renderer.domElement);
     renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block';
@@ -73,14 +90,52 @@ const Hero3D: React.FC<Props> = ({ onGetStarted }) => {
     const look = new THREE.Vector3(...STOPS[0].look);
     camera.position.set(...STOPS[0].pos);
 
-    const key = new THREE.DirectionalLight(0xffffff, 2.6); key.position.set(4, 6, 3); scene.add(key);
-    const rim = new THREE.DirectionalLight(LIME, 2.2); rim.position.set(-5, 2.5, -4); scene.add(rim);
+    const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(4, 6, 3); scene.add(key);
+    const rim = new THREE.DirectionalLight(LIME, 1.8); rim.position.set(-5, 2.5, -4); scene.add(rim);
 
-    const { car, wheels, anchors } = buildCar();
+    // Parte con l'auto procedurale; se il modello reale si carica, lo sostituisce
+    const built = buildCar();
+    let car: THREE.Object3D = built.car;
+    let wheels: THREE.Group[] = built.wheels;
+    let anchors: Record<string, Anchor> = built.anchors;
     scene.add(car);
     const { stage, scan } = buildStage();
     scene.add(stage);
     const carWorld = new THREE.Matrix4();
+
+    let disposed = false;
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('/draco/');
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.setDRACOLoader(draco);
+    gltfLoader.load(MODEL_URL, (gltf) => {
+      if (disposed) return;
+      const holder = new THREE.Group();
+      gltf.scene.rotation.y = MODEL_YAW;
+      holder.add(gltf.scene);
+      // normalizza: lunghezza fissa lungo X, centrata, appoggiata a terra
+      const raw = new THREE.Box3().setFromObject(holder);
+      holder.scale.setScalar(MODEL_LENGTH / Math.max(0.0001, raw.getSize(new THREE.Vector3()).x));
+      const root = new THREE.Group();
+      root.add(holder);
+      const box = new THREE.Box3().setFromObject(root);
+      const c = box.getCenter(new THREE.Vector3());
+      holder.position.set(-c.x, -0.04 - box.min.y, -c.z);
+      root.updateMatrixWorld(true);
+      const fit = new THREE.Box3().setFromObject(root);
+      const ctr = fit.getCenter(new THREE.Vector3());
+      const sz = fit.getSize(new THREE.Vector3());
+      const next: Record<string, Anchor> = {};
+      Object.entries(ANCHOR_FRACTIONS).forEach(([id, f]) => {
+        next[id] = {
+          position: new THREE.Vector3(ctr.x + f.at[0] * sz.x / 2, fit.min.y + f.at[1] * sz.y, ctr.z + f.at[2] * sz.z / 2),
+          normal: new THREE.Vector3(...f.normal).normalize(),
+        };
+      });
+      scene.remove(car);
+      scene.add(root);
+      car = root; wheels = []; anchors = next;
+    }, undefined, () => { /* resta l'auto procedurale */ });
 
     const size = { w: 1, h: 1 };
     const resize = () => {
@@ -194,6 +249,8 @@ const Hero3D: React.FC<Props> = ({ onGetStarted }) => {
     raf = requestAnimationFrame(frame);
 
     return () => {
+      disposed = true;
+      draco.dispose();
       cancelAnimationFrame(raf);
       ro.disconnect(); io.disconnect();
       window.removeEventListener('pointermove', onMove);
