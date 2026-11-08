@@ -28,6 +28,11 @@ export const setUnauthorizedHandler = (handler: (() => void) | null) => {
   onUnauthorized = handler;
 };
 
+// Provider asincrono del token (Clerk): i token di sessione Clerk durano pochi secondi,
+// vanno richiesti a ogni chiamata invece di essere salvati nel localStorage.
+let tokenProvider: (() => Promise<string | null>) | null = null;
+export const setTokenProvider = (fn: (() => Promise<string | null>) | null) => { tokenProvider = fn; };
+
 export interface ApiFetchOptions {
   retries?: number;
   baseDelayMs?: number;
@@ -43,14 +48,15 @@ export const apiFetch = async (
 ): Promise<Response> => {
   const { retries = 2, baseDelayMs = 500, skipUnauthorizedHandler = false } = options;
 
-  const mergedInit: RequestInit = {
-    ...init,
-    credentials: 'include',
-    headers: {
-      ...getAuthHeaders(),
-      ...((init.headers as Record<string, string> | undefined) ?? {}),
-    },
+  const headers: Record<string, string> = {
+    ...getAuthHeaders(),
+    ...((init.headers as Record<string, string> | undefined) ?? {}),
   };
+  if (tokenProvider) {
+    const t = await tokenProvider();
+    if (t) headers.Authorization = `Bearer ${t}`;
+  }
+  const mergedInit: RequestInit = { ...init, credentials: 'include', headers };
 
   let response = await fetch(input, mergedInit);
   for (let attempt = 0; attempt < retries && response.status === 429; attempt++) {

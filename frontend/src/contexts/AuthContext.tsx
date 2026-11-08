@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, AuthContextType, LoginCredentials, RegisterData } from '../types/auth';
 import { API_URL, apiFetch, setToken, clearToken, setUnauthorizedHandler } from '../api/client';
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

@@ -8,6 +8,8 @@ import { FAQSection } from './FAQSection';
 import { CTASection } from './CTASection';
 import { LoginForm } from '../auth/LoginForm';
 import { RegisterForm } from '../auth/RegisterForm';
+import { SignIn, SignUp } from '@clerk/clerk-react';
+import { CLERK_ENABLED } from '../../api/clerkConfig';
 
 export const LandingPage: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false);
@@ -60,8 +62,12 @@ export const LandingPage: React.FC = () => {
             </div>
             
             {/* Right side - Auth Form */}
-            <div className="bg-surface rounded-2xl shadow-2xl p-8">
-              {authMode === 'login' ? (
+            <div className={CLERK_ENABLED ? 'flex flex-col items-center' : 'bg-surface rounded-2xl shadow-2xl p-8'}>
+              {CLERK_ENABLED ? (
+                authMode === 'login'
+                  ? <SignIn routing="virtual" signUpUrl="#" fallbackRedirectUrl="/" />
+                  : <SignUp routing="virtual" signInUrl="#" fallbackRedirectUrl="/" />
+              ) : authMode === 'login' ? (
                 <LoginForm onSwitchToRegister={() => setAuthMode('register')} />
               ) : (
                 <RegisterForm onSwitchToLogin={() => setAuthMode('login')} />

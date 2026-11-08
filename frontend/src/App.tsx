@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Routes, Route } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ClerkAuthProvider } from './contexts/ClerkAuthProvider';
+import { CLERK_ENABLED } from './api/clerkConfig';
 import { LandingPage } from './components/landing/LandingPage';
 import PrivacyPage from './components/legal/PrivacyPage';
 import TermsPage from './components/legal/TermsPage';
@@ -375,11 +377,12 @@ const Dashboard: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  const Provider = CLERK_ENABLED ? ClerkAuthProvider : AuthProvider;
   return (
-    <AuthProvider>
+    <Provider>
       <AppContent />
       <Toaster theme="dark" richColors />
-    </AuthProvider>
+    </Provider>
   );
 };
 
