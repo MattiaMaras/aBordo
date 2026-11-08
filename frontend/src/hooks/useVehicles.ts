@@ -16,6 +16,8 @@ export const useVehicles = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // true solo quando veicoli, notifiche, statistiche e costi sono stati caricati almeno una volta
+  const [initialDataReady, setInitialDataReady] = useState(false);
 
   // getAuthHeaders e requestWithBackoff centralizzati in api/client
 
@@ -338,6 +340,7 @@ export const useVehicles = () => {
       await fetchNotifications();
       await fetchStats();
       await refreshCostsSummary();
+      setInitialDataReady(true);
     };
 
     fetchInitialData();
@@ -348,6 +351,7 @@ export const useVehicles = () => {
     notifications,
     stats: { ...stats, totalVehicles: vehicles.length },
     loading,
+    initialDataReady,
     error,
     addVehicle,
     onboardVehicle,

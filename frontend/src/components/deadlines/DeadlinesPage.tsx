@@ -1,17 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Calendar, Filter, Search, ArrowLeft, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { StatusBadge } from '../common/StatusBadge';
-import { VehicleNotification, Vehicle, NotificationStatus, Service } from '../../types/vehicle';
-import { MaintenanceRecord } from '../../types/maintenance';
-import { formatDate, getDaysUntilExpiry, getNotificationStatus } from '../../utils/dateUtils';
+import { VehicleNotification, Vehicle, NotificationStatus } from '../../types/vehicle';
+import { formatDate } from '../../utils/dateUtils';
 import { toast } from 'sonner';
-import { API_URL, apiFetch, getAuthHeaders } from '../../api/client';
-import { normalizeServiceList, normalizeMaintenanceList } from '../../api/normalizers';
 
 interface DeadlinesPageProps {
-  notifications: VehicleNotification[];
+  /** Lista unificata (stessa di campanella e contatori) */
+  deadlines: VehicleNotification[];
   onBack: () => void;
   vehicles?: Vehicle[];
   onUpdateNotification?: (id: string, status: NotificationStatus) => Promise<{ success: boolean; error?: string }>;
@@ -25,18 +23,12 @@ const typeLabels: Record<VehicleNotification['type'], string> = {
   maintenance: 'Manutenzione',
 };
 
-export const DeadlinesPage: React.FC<DeadlinesPageProps> = ({ notifications, onBack, vehicles = [], onUpdateNotification }) => {
+export const DeadlinesPage: React.FC<DeadlinesPageProps> = ({ deadlines, onBack, vehicles = [], onUpdateNotification }) => {
   const [query, setQuery] = useState('');
   const [statusFilters, setStatusFilters] = useState<NotificationStatus[]>([]);
   const [typeFilters, setTypeFilters] = useState<VehicleNotification['type'][]>([]);
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-
-  // servizi per veicolo per calcolare i km rimanenti al prossimo tagliando
-  const [servicesByVehicle, setServicesByVehicle] = useState<Record<string, Service[]>>({});
-  // manutenzioni per veicolo per mostrare tutte le prossime scadenze di manutenzione
-  const [maintenancesByVehicle, setMaintenancesByVehicle] = useState<Record<string, MaintenanceRecord[]>>({});
-  const API = API_URL;
 
   const vehiclesById = useMemo(() => {
     const map: Record<string, Vehicle> = {};
@@ -44,203 +36,22 @@ export const DeadlinesPage: React.FC<DeadlinesPageProps> = ({ notifications, onB
     return map;
   }, [vehicles]);
 
-  // Estrae un'etichetta dettagliata dalla stringa del messaggio di manutenzione
-  const getMaintenanceDetailLabel = (message?: string) => {
-    if (!message) return 'Manutenzione';
-    const known = ['Cambio olio', 'Filtri', 'Freni', 'Cambio pneumatici', 'AdBlue', 'Tagliando'];
-    for (const k of known) {
-      if (message.toLowerCase().includes(k.toLowerCase())) return k;
-    }
-    const idx = message.indexOf(' in scadenza');
-    if (idx > 0) return message.slice(0, idx);
-    const idx2 = message.indexOf(' tra ');
-    if (idx2 > 0) return message.slice(0, idx2);
-    const idx3 = message.indexOf(' scadut');
-    if (idx3 > 0) return message.slice(0, idx3);
-    return 'Manutenzione';
-  };
-
-  // carica servizi e manutenzioni per tutti i veicoli per mostrare scadenze chilometriche e manutenzioni
-  useEffect(() => {
-    const loadAllServices = async () => {
-      try {
-        const entries = await Promise.all(vehicles.map(async (v) => {
-        const resp = await apiFetch(`${API}/vehicles/${v.id}`, { headers: getAuthHeaders() });
-        if (!resp.ok) return [String(v.id), [] as Service[], [] as MaintenanceRecord[]] as const;
-        const data = await resp.json();
-          const services = normalizeServiceList(Array.isArray(data.services) ? data.services : [], String(v.id));
-          const maints = normalizeMaintenanceList(Array.isArray(data.maintenances) ? data.maintenances : [], String(v.id));
-          return [String(v.id), services, maints] as const;
-        }));
-        const svcObj: Record<string, Service[]> = {};
-        const maintObj: Record<string, MaintenanceRecord[]> = {};
-        entries.forEach(([vid, svcs, maints]) => { svcObj[vid] = svcs; maintObj[vid] = maints; });
-        setServicesByVehicle(svcObj);
-        setMaintenancesByVehicle(maintObj);
-      } catch (e) {
-        // silenzioso: se fallisce, semplicemente non mostriamo tagliandi chilometrici
-        setServicesByVehicle({});
-        setMaintenancesByVehicle({});
-      }
-    };
-    if (vehicles.length > 0) {
-      loadAllServices();
-    } else {
-      setServicesByVehicle({});
-      setMaintenancesByVehicle({});
-    }
-  }, [vehicles, notifications]);
-
-  // costruisci elementi chilometrici per tagliando come notifiche sintetiche
-  const serviceKmNotifications: VehicleNotification[] = useMemo(() => {
-    const result: VehicleNotification[] = [];
-    vehicles.forEach(v => {
-      const services = servicesByVehicle[String(v.id)] || [];
-      services.forEach(s => {
-        if (typeof s.nextServiceMileage === 'number' && s.nextServiceMileage > 0) {
-          const current = v.currentMileage ?? 0;
-          const kmUntil = s.nextServiceMileage - current;
-          const status: NotificationStatus = (
-            kmUntil <= 0 ? 'expired' :
-            kmUntil <= 250 ? 'critical' :
-            kmUntil <= 600 ? 'warning' :
-            'safe'
-          );
-          const message = kmUntil <= 0
-            ? `Tagliando scaduto, superati ${Math.abs(kmUntil)} km`
-            : `Tagliando tra ${kmUntil} km`;
-          result.push({
-            id: `service-km-${v.id}-${s.id}`,
-            vehicleId: String(v.id),
-            type: 'service',
-            status,
-            // per ordinare insieme, mettiamo giorniUntilExpiry a un grande numero per i km, ma useremo kmUntilService per sort specifico
-            daysUntilExpiry: 999999,
-            message,
-            expiryDate: '',
-            kmUntil: kmUntil,
-            nextMileage: s.nextServiceMileage,
-            kmUntilService: kmUntil,
-            nextServiceMileage: s.nextServiceMileage,
-          });
-        }
-      });
-    });
-    return result;
-  }, [servicesByVehicle, vehicles]);
-
   const filtered = useMemo(() => {
-    // helper label per manutenzione
-    const labelForMaintenanceType = (t: MaintenanceRecord['type']) => {
-      const map: Record<MaintenanceRecord['type'], string> = {
-        oil: 'Cambio olio',
-        filters: 'Filtri',
-        brakes: 'Freni',
-        tires: 'Cambio pneumatici',
-        adblue: 'AdBlue',
-        other: 'Manutenzione',
-        inspection: 'Revisione',
-        insurance: 'Assicurazione',
-        tax: 'Bollo',
-        service: 'Tagliando',
-      };
-      return map[t] || 'Manutenzione';
-    };
-
-    // costruisci notifiche da manutenzioni (una per ogni nextDue presente)
-    const maintenanceNotifications: VehicleNotification[] = [];
-    vehicles.forEach(v => {
-      const maints = maintenancesByVehicle[String(v.id)] || [];
-      maints.forEach(m => {
-        const label = (
-          m.type === 'other'
-            ? (m.title || m.description || labelForMaintenanceType(m.type))
-            : labelForMaintenanceType(m.type)
-        );
-        if (typeof m.nextMileage === 'number' && m.nextMileage > 0) {
-          const current = v.currentMileage ?? 0;
-          const kmUntil = m.nextMileage - current;
-          const status: NotificationStatus = (
-            kmUntil <= 0 ? 'expired' :
-            kmUntil <= 250 ? 'critical' :
-            kmUntil <= 600 ? 'warning' :
-            'safe'
-          );
-          const msg = kmUntil <= 0
-            ? `${label} scaduta, superati ${Math.abs(kmUntil)} km`
-            : `${label} tra ${kmUntil} km`;
-          maintenanceNotifications.push({
-            id: `maintenance-km-${v.id}-${m.id}`,
-            vehicleId: String(v.id),
-            type: 'maintenance',
-            status,
-            daysUntilExpiry: 999999,
-            message: msg,
-            expiryDate: '',
-            kmUntil: kmUntil,
-            nextMileage: m.nextMileage,
-            // aggiungi descrizione per mostrare dettagli intervento
-            description: m.description,
-          } as any);
-        } else if (m.nextDue) {
-          const days = getDaysUntilExpiry(m.nextDue);
-          const status = getNotificationStatus(days);
-          const msg = days < 0 ? `${label} scaduta da ${Math.abs(days)} giorni` : `${label} tra ${days} giorni`;
-          maintenanceNotifications.push({
-            id: `maintenance-${v.id}-${m.id}`,
-            vehicleId: String(v.id),
-            type: 'maintenance',
-            status,
-            daysUntilExpiry: days,
-            message: msg,
-            expiryDate: m.nextDue,
-            description: m.description,
-          });
-        }
-      });
-    });
-
-    // unisci notifiche temporali (escludendo manutenzione aggregata backend) con quelle chilometriche e tutte le manutenzioni
-    let list: VehicleNotification[] = [
-      // escludi notifiche già segnate come "safe" dalle scadenze
-      ...notifications.filter(n => n.type !== 'maintenance' && n.status !== 'safe'),
-      ...serviceKmNotifications,
-      ...maintenanceNotifications,
-    ];
-    if (statusFilters.length > 0) {
-      list = list.filter(n => statusFilters.includes(n.status));
-    }
-    if (typeFilters.length > 0) {
-      list = list.filter(n => typeFilters.includes(n.type));
-    }
-    if (vehicleFilter !== 'all') {
-      list = list.filter(n => String(n.vehicleId) === String(vehicleFilter));
-    }
-    
+    // La lista unificata è già ordinata per gravità; qui si applicano solo i filtri.
+    let list = deadlines.filter(n => n.status !== 'safe');
+    if (statusFilters.length > 0) list = list.filter(n => statusFilters.includes(n.status));
+    if (typeFilters.length > 0) list = list.filter(n => typeFilters.includes(n.type));
+    if (vehicleFilter !== 'all') list = list.filter(n => String(n.vehicleId) === String(vehicleFilter));
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       list = list.filter(n => {
         const vehicle = vehiclesById[String(n.vehicleId)];
         const vehicleText = vehicle ? `${vehicle.plateNumber} ${vehicle.brand} ${vehicle.model}`.toLowerCase() : '';
-        return (
-          n.message.toLowerCase().includes(q) ||
-          typeLabels[n.type].toLowerCase().includes(q) ||
-          vehicleText.includes(q)
-        );
+        return n.message.toLowerCase().includes(q) || (n.label ?? '').toLowerCase().includes(q) || typeLabels[n.type].toLowerCase().includes(q) || vehicleText.includes(q);
       });
     }
-    // ordinamento: prima scadenze km (per km rimanenti), poi temporali (per giorni)
-    return list.sort((a, b) => {
-      const aKm = typeof (a as any).kmUntil === 'number' || typeof a.kmUntilService === 'number';
-      const bKm = typeof (b as any).kmUntil === 'number' || typeof b.kmUntilService === 'number';
-      const aVal = (a as any).kmUntil ?? a.kmUntilService ?? Infinity;
-      const bVal = (b as any).kmUntil ?? b.kmUntilService ?? Infinity;
-      if (aKm && bKm) return aVal - bVal;
-      if (aKm && !bKm) return -1;
-      if (!aKm && bKm) return 1;
-      return a.daysUntilExpiry - b.daysUntilExpiry;
-    });
-  }, [notifications, serviceKmNotifications, statusFilters, typeFilters, query, vehicleFilter, vehiclesById, maintenancesByVehicle, vehicles]);
+    return list;
+  }, [deadlines, statusFilters, typeFilters, query, vehicleFilter, vehiclesById]);
 
   const getIconForStatus = (status: string) => {
     switch (status) {
@@ -355,7 +166,7 @@ export const DeadlinesPage: React.FC<DeadlinesPageProps> = ({ notifications, onB
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
-                          {n.type === 'maintenance' ? getMaintenanceDetailLabel(n.message) : typeLabels[n.type]}
+                          {n.label || typeLabels[n.type]}
                         </span>
                         <span className="text-sm font-medium text-gray-900">{n.message}</span>
                       </div>

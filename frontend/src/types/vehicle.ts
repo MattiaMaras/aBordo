@@ -88,6 +88,8 @@ export interface VehicleNotification {
   daysUntilExpiry: number;
   message: string;
   expiryDate: string;
+  // etichetta pulita (es. "Cambio olio"), senza dover interpretare il messaggio
+  label?: string;
   // dettagli opzionali per manutenzioni/interventi
   description?: string;
   // opzionali per scadenze chilometriche

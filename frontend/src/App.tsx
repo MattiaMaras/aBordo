@@ -22,11 +22,12 @@ import { Button } from './components/common/Button';
 import { useVehicles } from './hooks/useVehicles';
 import { MaintenanceRecord } from './types/maintenance';
 import { useMaintenances } from './hooks/useMaintenances';
-import { Vehicle } from './types/vehicle';
+import { Vehicle, Service } from './types/vehicle';
 import { DeadlinesPage } from './components/deadlines/DeadlinesPage';
 import { CostsPage } from './components/costs/CostsPage';
 import { Toaster } from 'sonner';
-import { normalizeMaintenanceList } from './api/normalizers';
+import { normalizeMaintenanceList, normalizeServiceList } from './api/normalizers';
+import { buildDeadlines, summarize } from './utils/deadlines';
 import { API_URL, apiFetch } from './api/client';
 import { kmStatus } from './utils/maintenanceUtils';
 
@@ -63,7 +64,7 @@ const DashboardSkeleton: React.FC = () => (
 );
 
 const Dashboard: React.FC = () => {
-  const { vehicles, notifications, stats, loading, onboardVehicle, updateVehicle, getNotificationsForVehicle, updateNotificationStatus, refreshNotifications } = useVehicles();
+  const { vehicles, notifications, stats, loading, initialDataReady, onboardVehicle, updateVehicle, getNotificationsForVehicle, updateNotificationStatus, refreshNotifications } = useVehicles();
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const { maintenances, addMaintenance, updateMaintenance, deleteMaintenance } = useMaintenances(selectedVehicle?.id ?? '');
   const [costsRefreshToken, setCostsRefreshToken] = useState(0);
@@ -88,96 +89,50 @@ const Dashboard: React.FC = () => {
   };
 
   const [maintenancesByVehicle, setMaintenancesByVehicle] = useState<Record<string, MaintenanceRecord[]>>({});
+  const [servicesByVehicle, setServicesByVehicle] = useState<Record<string, Service[]>>({});
+  const [sourcesReady, setSourcesReady] = useState(false);
 
+  // Carica manutenzioni e tagliandi di tutti i veicoli con 2 richieste totali (niente N+1)
   const loadMaintenances = React.useCallback(async () => {
+    const group = (rows: any[]) => {
+      const g: Record<string, any[]> = {};
+      for (const r of rows) (g[String(r.vehicle_id ?? r.vehicleId ?? '')] ??= []).push(r);
+      return g;
+    };
     try {
-      // Una sola richiesta per tutte le manutenzioni dell'utente (evita N+1)
-      const resp = await apiFetch(`${API_URL}/vehicles/maintenances/all`);
-      if (!resp.ok) {
-        setMaintenancesByVehicle({});
-        return;
-      }
-      const data = await resp.json();
-      const all: any[] = Array.isArray(data.maintenances) ? data.maintenances : [];
-      const grouped: Record<string, any[]> = {};
-      for (const m of all) {
-        const vid = String(m.vehicle_id ?? m.vehicleId ?? '');
-        (grouped[vid] ??= []).push(m);
-      }
-      const obj: Record<string, MaintenanceRecord[]> = {};
-      for (const [vid, list] of Object.entries(grouped)) {
-        obj[vid] = normalizeMaintenanceList(list, vid);
-      }
-      setMaintenancesByVehicle(obj);
+      const [mRes, sRes] = await Promise.all([
+        apiFetch(`${API_URL}/vehicles/maintenances/all`),
+        apiFetch(`${API_URL}/vehicles/services/all`),
+      ]);
+      const mData = mRes.ok ? await mRes.json() : { maintenances: [] };
+      const sData = sRes.ok ? await sRes.json() : { services: [] };
+      const m: Record<string, MaintenanceRecord[]> = {};
+      for (const [vid, list] of Object.entries(group(mData.maintenances ?? []))) m[vid] = normalizeMaintenanceList(list, vid);
+      const sv: Record<string, Service[]> = {};
+      for (const [vid, list] of Object.entries(group(sData.services ?? []))) sv[vid] = normalizeServiceList(list, vid);
+      setMaintenancesByVehicle(m);
+      setServicesByVehicle(sv);
     } catch {
       setMaintenancesByVehicle({});
+      setServicesByVehicle({});
+    } finally {
+      setSourcesReady(true);
     }
   }, []);
 
   useEffect(() => {
-    if (vehicles.length > 0) loadMaintenances(); else setMaintenancesByVehicle({});
+    if (vehicles.length > 0) loadMaintenances(); else { setMaintenancesByVehicle({}); setServicesByVehicle({}); setSourcesReady(true); }
   }, [vehicles, loadMaintenances]);
 
-  const maintenanceUrgents = (() => {
-    const labelForMaintenanceType = (t: string) => {
-      const map: Record<string, string> = {
-        oil: 'Cambio olio',
-        filters: 'Filtri',
-        brakes: 'Freni',
-        tires: 'Cambio pneumatici',
-        adblue: 'AdBlue',
-        other: 'Manutenzione',
-      };
-      return map[t] || 'Manutenzione';
-    };
-    const list: { id: string; vehicleId: string; type: 'maintenance'; status: 'critical' | 'warning' | 'expired'; daysUntilExpiry: number; message: string; expiryDate: string }[] = [];
-    vehicles.forEach(v => {
-      const maints = maintenancesByVehicle[String(v.id)] || [];
-      maints.forEach((m: any) => {
-        // usa campi normalizzati se presenti
-        const nextMileage = typeof m.nextMileage === 'number' ? m.nextMileage : m.next_mileage;
-        const nextDue = m.nextDue ?? m.next_maintenance;
-        if (typeof nextMileage === 'number' && nextMileage > 0) {
-          const current = v.currentMileage ?? 0;
-          const kmUntil = nextMileage - current;
-          const status = kmStatus(m.type, kmUntil);
-          if (status !== 'safe') {
-            const label = (
-              m.type === 'other'
-                ? (m.title || m.description || labelForMaintenanceType(m.type))
-                : labelForMaintenanceType(m.type)
-            );
-            const msg = kmUntil <= 0 ? `${label} scaduta, superati ${Math.abs(kmUntil)} km` : `${label} tra ${kmUntil} km`;
-            list.push({ id: `maintenance-km-${v.id}-${String(m.id ?? '')}`, vehicleId: String(v.id), type: 'maintenance', status, daysUntilExpiry: kmUntil <= 0 ? -999999 : 999999, message: msg, expiryDate: '', nextMileage, kmUntil, description: m.description } as any);
-          }
-        } else if (nextDue) {
-          const next = nextDue;
-          const days = (() => {
-            const today = new Date();
-            const expiry = new Date(next);
-            return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          })();
-          const status = days < 0 ? 'expired' : (days <= 7 ? 'critical' : (days <= 30 ? 'warning' : 'safe'));
-          if (status !== 'safe') {
-            const label = (
-              m.type === 'other'
-                ? (m.title || m.description || labelForMaintenanceType(m.type))
-                : labelForMaintenanceType(m.type)
-            );
-            const msg = days < 0 ? `${label} scaduta da ${Math.abs(days)} giorni` : `${label} tra ${days} giorni`;
-            list.push({ id: `maintenance-${v.id}-${String(m.id ?? '')}`, vehicleId: String(v.id), type: 'maintenance', status, daysUntilExpiry: days, message: msg, expiryDate: next, description: m.description } as any);
-          }
-        }
-      });
-    });
-    return list;
-  })();
-
-  const priorityNotifications = [...notifications.filter(n => n.type !== 'maintenance'), ...maintenanceUrgents]
-    .filter(n => n.status === 'critical' || n.status === 'warning' || n.status === 'expired')
-    .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry)
-    .slice(0, 10);
-
+  // UNICA lista di scadenze: campanella, contatori, Centro Notifiche, modale e pagina Scadenze coincidono
+  const deadlines = React.useMemo(
+    () => buildDeadlines({ vehicles, notifications, maintenancesByVehicle, servicesByVehicle }),
+    [vehicles, notifications, maintenancesByVehicle, servicesByVehicle]
+  );
+  const deadlineSummary = React.useMemo(() => summarize(deadlines), [deadlines]);
+  // Finché i dati non sono tutti arrivati non mostriamo "0 scadenze / tutto in regola": sarebbe un falso via libera
+  const deadlinesPending = !initialDataReady || !sourcesReady;
+  const priorityNotifications = deadlineSummary.actionable;
   const urgentCount = priorityNotifications.length;
 
   // Navigazione unificata: torna alla dashboard azzerando il veicolo selezionato
@@ -224,7 +179,7 @@ const Dashboard: React.FC = () => {
   if (showDeadlines) {
     return shell(
       <DeadlinesPage
-        notifications={notifications}
+        deadlines={deadlines}
         vehicles={vehicles}
         onUpdateNotification={updateNotificationStatus}
         onBack={() => goTo('/')}
@@ -303,7 +258,15 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Grid */}
-      <StatsGrid stats={stats} onDeadlinesClick={() => navigate('/deadlines')} />
+      <StatsGrid
+        vehiclesCount={vehicles.length}
+        monthlyCosts={stats.totalMonthlyCosts}
+        summary={deadlineSummary}
+        pending={deadlinesPending}
+        vehicleLabel={(id) => { const v = vehicles.find(x => String(x.id) === String(id)); return v ? `${v.brand} ${v.model}` : ''; }}
+        onDeadlinesClick={() => navigate('/deadlines')}
+        onCostsClick={() => navigate('/costs')}
+      />
 
       {/* Quick action: History page link */}
       <div className="mt-6 mb-4 flex items-center justify-end">
@@ -317,7 +280,7 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Vehicles Section */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2" id="veicoli">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">
               I Tuoi Veicoli ({vehicles.length})
@@ -360,6 +323,8 @@ const Dashboard: React.FC = () => {
         <div className="lg:col-span-1">
           <NotificationCenter
             notifications={priorityNotifications}
+            pending={deadlinesPending}
+            vehicles={vehicles}
             onViewAll={() => navigate('/deadlines')}
           />
         </div>

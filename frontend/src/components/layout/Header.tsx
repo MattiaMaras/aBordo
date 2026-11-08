@@ -1,5 +1,6 @@
 import React from 'react';
 import { Car, Bell, Settings, User, Calendar, CreditCard, List } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
@@ -24,6 +25,9 @@ export const Header: React.FC<HeaderProps> = ({
   onVehiclesClick,
 }) => {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
+  // Voce di navigazione attiva: evidenziata e annunciata ai lettori di schermo
+  const navCls = (active: boolean) => `p-2 transition-colors ${active ? 'text-blue-600' : 'text-gray-600 hover:text-gray-900'}`;
 
   return (
     <header className="bg-surface shadow-sm border-b border-gray-200 sticky top-0 z-50">
@@ -42,7 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center space-x-4">
             <button 
               onClick={onVehiclesClick}
-              className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className={navCls(pathname === '/')}
+              aria-current={(pathname === '/') ? 'page' : undefined}
               title="Veicoli"
               aria-label="Veicoli"
             >
@@ -53,7 +58,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
             <button 
               onClick={onDeadlinesClick}
-              className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className={navCls(pathname === '/deadlines')}
+              aria-current={(pathname === '/deadlines') ? 'page' : undefined}
               title="Scadenze"
               aria-label="Scadenze"
             >
@@ -64,7 +70,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
             <button 
               onClick={onCostsClick}
-              className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className={navCls(pathname === '/costs')}
+              aria-current={(pathname === '/costs') ? 'page' : undefined}
               title="Costi"
               aria-label="Costi"
             >

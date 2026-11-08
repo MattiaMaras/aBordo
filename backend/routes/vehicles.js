@@ -72,6 +72,24 @@ router.get('/maintenances/all', async (req, res) => {
   }
 });
 
+// Tutti i tagliandi dei veicoli dell'utente in una sola query (evita N+1 in dashboard/scadenze)
+router.get('/services/all', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT s.*
+       FROM services s
+       JOIN vehicles v ON s.vehicle_id = v.id
+       WHERE v.user_id = $1
+       ORDER BY s.vehicle_id, s.created_at DESC`,
+      [req.user.id]
+    );
+    res.json({ services: result.rows });
+  } catch (error) {
+    console.error('Errore nel recupero tagliandi aggregati:', error);
+    res.status(500).json({ error: 'Errore del server nel recupero tagliandi' });
+  }
+});
+
 // Ottieni un veicolo specifico con tutti i dettagli
 router.get('/:id', async (req, res) => {
   try {
