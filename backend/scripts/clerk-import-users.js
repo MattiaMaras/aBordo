@@ -7,7 +7,7 @@
 //  - idempotente: salta chi ha già un clerk_id; se l'email esiste già in Clerk, collega l'utente esistente
 //  - usa external_id = users.id, così il legame è tracciabile da entrambe le parti
 //
-// Uso:  node scripts/clerk-import-users.js [--apply] [--limit 10]
+// Uso:  node scripts/clerk-import-users.js [--apply] [--limit 10] [--email utente@esempio.it]
 // Richiede CLERK_SECRET_KEY (usa PRIMA l'istanza di sviluppo Clerk e un branch Neon).
 require('dotenv').config();
 const { pool } = require('../config/database');
@@ -15,6 +15,8 @@ const { pool } = require('../config/database');
 const APPLY = process.argv.includes('--apply');
 const limitIdx = process.argv.indexOf('--limit');
 const LIMIT = limitIdx > -1 ? Number(process.argv[limitIdx + 1]) : null;
+const emailIdx = process.argv.indexOf('--email');
+const ONLY_EMAIL = emailIdx > -1 ? process.argv[emailIdx + 1].toLowerCase() : null;
 const CLERK = 'https://api.clerk.com/v1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -35,7 +37,8 @@ const clerk = async (method, path, body) => {
 (async () => {
   if (APPLY && !process.env.CLERK_SECRET_KEY) throw new Error('CLERK_SECRET_KEY mancante');
   const { rows } = await pool.query(
-    `SELECT id, email, password, first_name, last_name FROM users WHERE clerk_id IS NULL ORDER BY id ${LIMIT ? `LIMIT ${LIMIT | 0}` : ''}`
+    `SELECT id, email, password, first_name, last_name FROM users WHERE clerk_id IS NULL ${ONLY_EMAIL ? 'AND LOWER(email) = $1' : ''} ORDER BY id ${LIMIT ? `LIMIT ${LIMIT | 0}` : ''}`,
+    ONLY_EMAIL ? [ONLY_EMAIL] : []
   );
   const total = (await pool.query('SELECT COUNT(*)::int c FROM users')).rows[0].c;
   console.log(`${APPLY ? 'APPLY' : 'DRY-RUN'}: ${rows.length} utenti da importare su ${total} totali`);
