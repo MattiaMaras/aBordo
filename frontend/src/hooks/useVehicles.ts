@@ -146,6 +146,29 @@ export const useVehicles = () => {
     }
   };
 
+  // Onboarding: veicolo + ultimo dato noto di tutti gli interventi, in una transazione
+  const onboardVehicle = async (payload: unknown) => {
+    try {
+      setError(null);
+      const response = await apiFetch(`${API_URL}/vehicles/onboard`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Errore nella creazione del veicolo');
+      }
+      setVehicles(prev => [...prev, data.vehicle]);
+      await Promise.all([fetchStats(), fetchNotifications(), refreshCostsSummary()]);
+      return { success: true as const, vehicle: data.vehicle as Vehicle };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      setError(errorMessage);
+      return { success: false as const, error: errorMessage };
+    }
+  };
+
   // Update vehicle
   const updateVehicle = async (vehicleId: string, vehicleData: Partial<VehicleFormInput>) => {
     try {
@@ -323,10 +346,11 @@ export const useVehicles = () => {
   return {
     vehicles,
     notifications,
-    stats,
+    stats: { ...stats, totalVehicles: vehicles.length },
     loading,
     error,
     addVehicle,
+    onboardVehicle,
     updateVehicle,
     deleteVehicle,
     updateNotificationStatus,

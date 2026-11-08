@@ -179,7 +179,7 @@ export const HistoryPage: React.FC<Props> = ({ vehicles, onBack }) => {
           </button>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4 flex items-center gap-4">
+        <div className="bg-surface rounded-lg shadow-sm p-4 mb-4 flex items-center gap-4">
           <label className="text-sm text-gray-700">Filtra per veicolo</label>
           <select
             className="border rounded-md px-3 py-2 text-sm"
@@ -195,7 +195,7 @@ export const HistoryPage: React.FC<Props> = ({ vehicles, onBack }) => {
           </select>
         </div>
 
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div className="bg-surface shadow-sm rounded-lg overflow-hidden">
           {loading ? (
             <div className="p-6 text-gray-600">Caricamento storico...</div>
           ) : error ? (
@@ -214,7 +214,7 @@ export const HistoryPage: React.FC<Props> = ({ vehicles, onBack }) => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Costo</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-surface divide-y divide-gray-200">
                   {filteredRecords.slice(0, 100).map((rec) => {
                     const v = vehicles.find(v => String(v.id) === String(rec.vehicleId));
                     return (

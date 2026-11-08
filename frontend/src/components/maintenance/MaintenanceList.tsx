@@ -5,9 +5,11 @@ import {
   Search, Pencil, Trash2, Check, X, Plus, ListX
 } from 'lucide-react';
 import { Card } from '../common/Card';
+import { Modal } from '../common/Modal';
 import { StatusBadge } from '../common/StatusBadge';
 import { MaintenanceRecord } from '../../types/maintenance';
 import { formatDate } from '../../utils/dateUtils';
+import { kmStatus } from '../../utils/maintenanceUtils';
 
 type UrgencyStatus = 'expired' | 'critical' | 'warning' | 'safe' | null;
 
@@ -17,6 +19,8 @@ interface MaintenanceListProps {
   onEdit?: (maintenance: MaintenanceRecord) => void;
   onDelete?: (maintenanceId: string) => Promise<{ success: boolean; error?: string }> | void;
   onAddNew?: () => void;
+  /** Vista compatta: mostra solo le ultime N manutenzioni effettuate + "Vedi tutto lo storico" */
+  limit?: number;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -80,11 +84,7 @@ const getNextDueStatus = (maintenance: MaintenanceRecord, currentMileage: number
     return 'safe';
   }
   if (typeof maintenance.nextMileage === 'number' && maintenance.nextMileage > 0) {
-    const kmUntil = maintenance.nextMileage - currentMileage;
-    if (kmUntil <= 0) return 'expired';
-    if (kmUntil <= 250) return 'critical';
-    if (kmUntil <= 600) return 'warning';
-    return 'safe';
+    return kmStatus(maintenance.type, maintenance.nextMileage - currentMileage);
   }
   return null;
 };
@@ -107,7 +107,10 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
   onEdit,
   onDelete,
   onAddNew,
+  limit,
 }) => {
+  const compact = typeof limit === 'number';
+  const [showAll, setShowAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | MaintenanceRecord['type']>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -138,6 +141,7 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
         return true;
       })
       .sort((a, b) => {
+        if (compact) return b.record.date.localeCompare(a.record.date);
         const rankDiff = priorityRank(a.status) - priorityRank(b.status);
         if (rankDiff !== 0) return rankDiff;
         if (a.status && b.status && a.record.nextDue && b.record.nextDue) {
@@ -146,7 +150,10 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
         // Nessuna scadenza confrontabile: interventi più recenti prima
         return b.record.date.localeCompare(a.record.date);
       });
-  }, [enriched, searchQuery, typeFilter, statusFilter]);
+  }, [enriched, searchQuery, typeFilter, statusFilter, compact]);
+
+  const visible = compact ? filtered.slice(0, limit) : filtered;
+  const hiddenCount = compact ? Math.max(0, filtered.length - (limit as number)) : 0;
 
   const hasActiveFilters = searchQuery.trim() !== '' || typeFilter !== 'all' || statusFilter !== 'all';
 
@@ -200,7 +207,8 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Barra di ricerca e filtri */}
+      {/* Barra di ricerca e filtri (nascosta nella vista compatta) */}
+      {!compact && (
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
@@ -217,7 +225,7 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
           aria-label="Filtra per tipo"
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-surface"
         >
           <option value="all">Tutti i tipi</option>
           {typesPresent.map(t => (
@@ -228,7 +236,7 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           aria-label="Filtra per stato"
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-surface"
         >
           <option value="all">Tutti gli stati</option>
           <option value="expired">Scadute</option>
@@ -238,6 +246,7 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
           <option value="none">Senza scadenza</option>
         </select>
       </div>
+      )}
 
       {filtered.length === 0 ? (
         <Card className="p-8 text-center">
@@ -256,7 +265,7 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
         </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map(({ record: maintenance, status: nextDueStatus }) => {
+          {visible.map(({ record: maintenance, status: nextDueStatus }) => {
             const isConfirming = confirmingDeleteId === maintenance.id;
             const isDeleting = deletingId === maintenance.id;
             return (
@@ -380,6 +389,35 @@ export const MaintenanceList: React.FC<MaintenanceListProps> = ({
             );
           })}
         </div>
+      )}
+
+      {compact && hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="w-full rounded-lg border border-gray-200 bg-surface py-2.5 text-sm font-medium text-gray-700 transition-[background-color,transform] duration-150 hover:bg-gray-100 active:scale-[0.99]"
+        >
+          Vedi tutto lo storico ({filtered.length})
+        </button>
+      )}
+
+      {showAll && (
+        <Modal onClose={() => setShowAll(false)} labelledBy="history-title" className="max-w-3xl max-h-[88vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 id="history-title" className="text-lg font-semibold text-gray-900">Storico manutenzioni</h2>
+            <button type="button" onClick={() => setShowAll(false)} aria-label="Chiudi storico" className="text-gray-400 hover:text-gray-700 transition-colors">
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="overflow-y-auto p-6">
+            <MaintenanceList
+              maintenances={maintenances}
+              currentMileage={currentMileage}
+              onEdit={onEdit ? (m) => { setShowAll(false); onEdit(m); } : undefined}
+              onDelete={onDelete}
+            />
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -51,7 +51,7 @@ export const BenefitsSection: React.FC = () => {
 
         <div className="grid md:grid-cols-2 gap-8">
           {benefits.map((benefit, index) => (
-            <div key={index} className="bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 group">
+            <div key={index} className="bg-surface rounded-xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 group">
               <div className="flex items-start space-x-4">
                 <div className="bg-gradient-to-br from-green-100 to-blue-100 w-16 h-16 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                   <benefit.icon className="h-8 w-8 text-green-600" />
@@ -80,7 +80,7 @@ export const BenefitsSection: React.FC = () => {
         </div>
 
         {/* ROI Calculator */}
-        <div className="mt-16 bg-white rounded-2xl p-8 shadow-xl">
+        <div className="mt-16 bg-surface rounded-2xl p-8 shadow-xl">
           <div className="text-center mb-8">
             <h3 className="text-2xl font-bold text-gray-900 mb-2">
               Calcola il tuo risparmio annuale

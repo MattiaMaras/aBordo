@@ -71,7 +71,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+      className="modal-backdrop fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50"
       onMouseDown={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) onClose();
       }}
@@ -82,7 +82,7 @@ export const Modal: React.FC<ModalProps> = ({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`bg-white rounded-xl shadow-2xl w-full overflow-hidden focus:outline-none ${className}`}
+        className={`modal-panel bg-surface rounded-xl shadow-2xl w-full overflow-hidden focus:outline-none ${className}`}
       >
         {children}
       </div>

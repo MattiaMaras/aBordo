@@ -53,7 +53,7 @@ export const ProblemsSection: React.FC = () => {
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           {problems.map((problem, index) => (
-            <div key={index} className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <div key={index} className="bg-surface rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300">
               <div className={`${problem.bgColor} w-12 h-12 rounded-lg flex items-center justify-center mb-4`}>
                 <problem.icon className={`h-6 w-6 ${problem.color}`} />
               </div>

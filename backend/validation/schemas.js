@@ -118,6 +118,60 @@ const maintenanceUpdateSchema = maintenanceCreateSchema.partial().extend({
   clearNextMileage: z.boolean().optional(),
 });
 
+// Onboarding veicolo: crea in un'unica transazione veicolo + ultimo dato noto di
+// tutti gli interventi periodici, così le notifiche funzionano fin dal primo giorno.
+const optionalLastDone = z.object({
+  lastDate: dateOnlyField,
+  lastMileage: optionalNonNegativeInt,
+});
+
+const onboardingSchema = z.object({
+  vehicle: vehicleCreateSchema,
+  insurance: z.object({
+    company: nameField('La compagnia assicurativa'),
+    expiryDate: dateOnlyField,
+    annualPremium: optionalNonNegativeAmount,
+  }),
+  tax: z.object({
+    region: nameField('La regione'),
+    expiryDate: dateOnlyField,
+    amount: optionalNonNegativeAmount,
+  }),
+  inspection: z.object({
+    lastInspectionDate: dateOnlyField,
+    inspectionCenter: optionalTextField(200),
+  }),
+  service: z.object({
+    lastServiceDate: dateOnlyField,
+    lastServiceMileage: z.number().int().min(0).max(10_000_000),
+    serviceInterval: z.number().int().min(1000).max(100_000).optional(),
+  }),
+  tires: z.object({ lastDate: dateOnlyField }),
+  filters: z.object({ lastDate: dateOnlyField }),
+  extras: z.object({
+    oilChange: optionalLastDone.optional(),
+    brakes: optionalLastDone.optional(),
+    belts: optionalLastDone.optional(),
+    // AdBlue: a chilometri (consumo variabile), quindi i km dell'ultimo rabbocco sono obbligatori
+    adblue: z.object({ lastDate: dateOnlyField, lastMileage: z.number().int().min(0).max(10_000_000) }).optional(),
+  }).optional(),
+}).superRefine((data, ctx) => {
+  if (data.service.lastServiceMileage > data.vehicle.currentMileage) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['service', 'lastServiceMileage'],
+      message: 'I km dell\'ultimo tagliando non possono superare i km attuali del veicolo',
+    });
+  }
+  if (data.extras?.adblue && data.extras.adblue.lastMileage > data.vehicle.currentMileage) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['extras', 'adblue', 'lastMileage'],
+      message: 'I km dell\'ultimo rabbocco AdBlue non possono superare i km attuali',
+    });
+  }
+});
+
 // Middleware di validazione: sostituisce req.body con i dati validati/normalizzati
 const validate = (schema) => (req, res, next) => {
   const result = schema.safeParse(req.body);
@@ -141,5 +195,6 @@ module.exports = {
   vehicleUpdateSchema,
   maintenanceCreateSchema,
   maintenanceUpdateSchema,
+  onboardingSchema,
   FUEL_TYPES,
 };

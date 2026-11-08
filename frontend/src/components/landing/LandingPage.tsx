@@ -25,7 +25,7 @@ export const LandingPage: React.FC = () => {
 
   if (showAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-surface to-green-50 flex items-center justify-center p-4">
         <div className="w-full max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left side - Branding */}
@@ -48,19 +48,19 @@ export const LandingPage: React.FC = () => {
               </p>
               
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-green-600">€2.500+</div>
-                  <div className="text-gray-600">Risparmio medio annuo</div>
+                <div className="bg-surface p-4 rounded-lg shadow-sm">
+                  <div className="text-lg font-semibold text-green-600">Email in anticipo</div>
+                  <div className="text-gray-600">Prima di ogni scadenza</div>
                 </div>
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="text-2xl font-bold text-blue-600">10.000+</div>
-                  <div className="text-gray-600">Utenti soddisfatti</div>
+                <div className="bg-surface p-4 rounded-lg shadow-sm">
+                  <div className="text-lg font-semibold text-blue-600">2 minuti</div>
+                  <div className="text-gray-600">Per configurare il veicolo</div>
                 </div>
               </div>
             </div>
             
             {/* Right side - Auth Form */}
-            <div className="bg-white rounded-2xl shadow-2xl p-8">
+            <div className="bg-surface rounded-2xl shadow-2xl p-8">
               {authMode === 'login' ? (
                 <LoginForm onSwitchToRegister={() => setAuthMode('register')} />
               ) : (
@@ -83,9 +83,9 @@ export const LandingPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-surface">
       {/* Navigation */}
-      <nav className="bg-white shadow-sm sticky top-0 z-50">
+      <nav className="bg-gray-50/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
@@ -125,7 +125,7 @@ export const LandingPage: React.FC = () => {
       <CTASection onGetStarted={handleGetStarted} />
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
+      <footer className="border-t border-gray-200 bg-gray-50 text-gray-900 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8">
             <div>
@@ -145,24 +145,24 @@ export const LandingPage: React.FC = () => {
             <div>
               <h4 className="font-semibold mb-4">Supporto</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><a href="#" className="hover:text-white">Centro Aiuto</a></li>
-                <li><a href="#" className="hover:text-white">Contatti</a></li>
-                <li><a href="#" className="hover:text-white">FAQ</a></li>
+                <li><a href="#" className="hover:text-gray-900">Centro Aiuto</a></li>
+                <li><a href="#" className="hover:text-gray-900">Contatti</a></li>
+                <li><a href="#" className="hover:text-gray-900">FAQ</a></li>
               </ul>
             </div>
             
             <div>
               <h4 className="font-semibold mb-4">Legale</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><a href="/privacy" className="hover:text-white">Privacy Policy</a></li>
-                <li><a href="/terms" className="hover:text-white">Termini di Servizio</a></li>
-                <li><a href="/privacy" className="hover:text-white">Cookie Policy</a></li>
+                <li><a href="/privacy" className="hover:text-gray-900">Privacy Policy</a></li>
+                <li><a href="/terms" className="hover:text-gray-900">Termini di Servizio</a></li>
+                <li><a href="/privacy" className="hover:text-gray-900">Cookie Policy</a></li>
               </ul>
             </div>
           </div>
           
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 A Bordo. Tutti i diritti riservati.</p>
+          <div className="border-t border-gray-200 mt-8 pt-8 text-center text-gray-400">
+            <p>&copy; {new Date().getFullYear()} A Bordo. Tutti i diritti riservati.</p>
           </div>
         </div>
       </footer>

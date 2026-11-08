@@ -7,6 +7,7 @@ import { Vehicle, VehicleNotification } from '../../types/vehicle';
 import { MaintenanceRecord } from '../../types/maintenance';
 import { MaintenanceList } from '../maintenance/MaintenanceList';
 import { AddMaintenanceForm } from '../maintenance/AddMaintenanceForm';
+import { MileageCheckBanner } from './MileageCheckBanner';
 import { getFuelTypeLabel } from '../../utils/vehicleUtils';
 import { formatDate, toInputDate } from '../../utils/dateUtils';
 import { useInsurances } from '../../hooks/useInsurances';
@@ -217,6 +218,15 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
 
       
 
+      {onUpdateVehicleMileage && (
+        <MileageCheckBanner
+          currentMileage={vehicle.currentMileage ?? 0}
+          mileageUpdatedAt={vehicle.updatedAt}
+          hasKmBasedDeadlines={maintenances.some(m => typeof m.nextMileage === 'number' && m.nextMileage > 0)}
+          onUpdate={async (km) => (await onUpdateVehicleMileage(km)) as { success: boolean; error?: string } | void}
+        />
+      )}
+
       {/* Gestione Manutenzioni */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
@@ -239,6 +249,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({
             <p className="text-sm text-gray-600 mb-4">Questa sezione registra interventi con costo (olio, filtri, freni, pneumatici, AdBlue, altro). Per assicurazione, bollo, revisione e tagliando usa le sezioni dedicate qui sotto.</p>
             <MaintenanceList
               maintenances={filteredMaintenances}
+              limit={5}
               currentMileage={vehicle.currentMileage ?? 0}
               onEdit={(m) => setMaintenanceModal({ mode: 'edit', record: m })}
               onDelete={async (id) => {

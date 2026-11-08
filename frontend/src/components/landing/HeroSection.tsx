@@ -1,117 +1,108 @@
 import React from 'react';
-import { ArrowRight, CheckCircle } from 'lucide-react';
+import { ArrowRight, BellRing, Check } from 'lucide-react';
 import { Button } from '../common/Button';
 
 interface HeroSectionProps {
   onGetStarted: () => void;
 }
 
+type Tone = 'red' | 'amber' | 'green';
+
+// Dati dimostrativi della finestra di prodotto (esempio, non dati reali di utenti)
+const DEMO_ROWS: { label: string; detail: string; value: string; tone: Tone }[] = [
+  { label: 'Assicurazione', detail: 'Allianz · scade 14 nov', value: '6 giorni', tone: 'red' },
+  { label: 'Gomme', detail: 'Cambio stagionale', value: '19 giorni', tone: 'amber' },
+  { label: 'Tagliando', detail: 'Prossimo a 62.000 km', value: '2.340 km', tone: 'green' },
+  { label: 'Revisione', detail: 'Scade a maggio 2027', value: '188 giorni', tone: 'green' },
+];
+
+const toneDot: Record<Tone, string> = {
+  red: 'bg-red-500 shadow-[0_0_0_4px_rgba(255,92,77,0.18)]',
+  amber: 'bg-yellow-500 shadow-[0_0_0_4px_rgba(255,194,51,0.16)]',
+  green: 'bg-green-500 shadow-[0_0_0_4px_rgba(52,211,153,0.14)]',
+};
+const toneText: Record<Tone, string> = { red: 'text-red-700', amber: 'text-yellow-700', green: 'text-green-700' };
+
 export const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted }) => {
   return (
-    <section className="relative bg-gradient-to-br from-blue-50 via-white to-green-50 pt-20 pb-16 overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-      
+    <section className="relative pt-16 pb-20 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left column - Content */}
+        <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-14 items-center">
           <div className="text-center lg:text-left">
-            <div className="inline-flex items-center bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-6">
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Oltre 10.000 veicoli già registrati
-            </div>
-            
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
-              Non perdere mai più una{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-green-600">
-                scadenza
-              </span>{' '}
-              del tuo veicolo
-            </h1>
-            
-            <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-              Gestisci revisioni, tagliandi, assicurazioni e manutenzioni in un'unica app. 
-              Ricevi notifiche automatiche e risparmia tempo e denaro.
+            <p className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-surface px-3.5 py-1.5 text-sm text-gray-600 mb-7">
+              <BellRing className="h-4 w-4 text-blue-500" aria-hidden="true" />
+              Avvisi via email prima di ogni scadenza
             </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 mb-8">
-              <Button 
-                size="lg" 
-                onClick={onGetStarted}
-                className="text-lg px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-              >
-                Inizia Gratis
-                <ArrowRight className="ml-2 h-5 w-5" />
+
+            <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] font-semibold tracking-tight text-gray-900 leading-[1.05] mb-6">
+              Revisione, bollo, assicurazione e tagliando.{' '}
+              <span className="text-blue-500">Mai più una scadenza persa.</span>
+            </h1>
+
+            <p className="text-lg text-gray-600 mb-9 leading-relaxed max-w-xl mx-auto lg:mx-0">
+              Inserisci l'ultimo intervento fatto: A Bordo calcola le prossime scadenze del tuo veicolo
+              e ti scrive in tempo, quando serve davvero.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 mb-9 justify-center lg:justify-start">
+              <Button size="lg" onClick={onGetStarted} className="text-base px-7 py-3.5 shadow-[0_8px_30px_-8px_rgba(190,242,60,0.55)]">
+                Inizia gratis
+                <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
               </Button>
-              
-              
             </div>
-            
-            <div className="flex items-center justify-center lg:justify-start space-x-6 text-sm text-gray-500">
-              <div className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                Gratis per sempre
-              </div>
-              <div className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                Nessuna carta richiesta
-              </div>
-              <div className="flex items-center">
-                <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                Setup in 2 minuti
-              </div>
-            </div>
+
+            <ul className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-sm text-gray-500">
+              {['Gratis', 'Nessuna carta richiesta', 'Pronto in 2 minuti'].map((t) => (
+                <li key={t} className="flex items-center gap-1.5">
+                  <Check className="h-4 w-4 text-blue-500" aria-hidden="true" />
+                  {t}
+                </li>
+              ))}
+            </ul>
           </div>
-          
-          {/* Right column - Hero Image */}
+
+          {/* Finestra di prodotto: l'interfaccia vera, non un'illustrazione */}
           <div className="relative">
-            <div className="relative z-10 bg-white rounded-2xl shadow-2xl p-6 transform rotate-3 hover:rotate-0 transition-transform duration-500">
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Dashboard A Bordo</h3>
-                  <div className="flex space-x-1">
-                    <div className="w-3 h-3 bg-red-400 rounded-full"></div>
-                    <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
-                    <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+            <div className="absolute -inset-6 rounded-[2rem] bg-blue-500/10 blur-3xl" aria-hidden="true" />
+            <div className="relative rounded-2xl border border-gray-200 bg-surface shadow-2xl overflow-hidden transition-transform duration-200 ease-out hover:-translate-y-0.5">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200">
+                <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
+                <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
+                <span className="h-2.5 w-2.5 rounded-full bg-gray-300" />
+                <span className="ml-3 text-xs text-gray-500">abordo · Fiat Panda</span>
+              </div>
+
+              <div className="p-5">
+                <div className="flex items-end justify-between mb-5">
+                  <div>
+                    <p className="text-lg font-semibold text-gray-900">Fiat Panda</p>
+                    <p className="font-mono text-sm text-gray-500 tracking-wider">QA123TS</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-2xl font-medium text-gray-900 tabular-nums">59.660</p>
+                    <p className="text-xs text-gray-500">km attuali</p>
                   </div>
                 </div>
-                
-                <div className="space-y-3">
-                  <div className="bg-white/20 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Fiat Punto - AB123CD</span>
-                      <span className="bg-red-500 text-xs px-2 py-1 rounded-full">7 giorni</span>
-                    </div>
-                    <p className="text-xs opacity-90 mt-1">Assicurazione in scadenza</p>
-                  </div>
-                  
-                  <div className="bg-white/20 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">VW Golf - XY789ZK</span>
-                      <span className="bg-yellow-500 text-xs px-2 py-1 rounded-full">15 giorni</span>
-                    </div>
-                    <p className="text-xs opacity-90 mt-1">Revisione programmata</p>
-                  </div>
-                  
-                  <div className="bg-white/20 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">BMW Serie 3 - MN456PQ</span>
-                      <span className="bg-green-500 text-xs px-2 py-1 rounded-full">OK</span>
-                    </div>
-                    <p className="text-xs opacity-90 mt-1">Tutto in regola</p>
-                  </div>
+
+                <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-gray-50">
+                  {DEMO_ROWS.map((r) => (
+                    <li key={r.label} className="flex items-center gap-3 px-4 py-3">
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${toneDot[r.tone]}`} aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900">{r.label}</p>
+                        <p className="text-xs text-gray-500 truncate">{r.detail}</p>
+                      </div>
+                      <span className={`font-mono text-sm tabular-nums ${toneText[r.tone]}`}>{r.value}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+                  <BellRing className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Email inviata: l'assicurazione scade tra 6 giorni.
                 </div>
               </div>
             </div>
-            
-            {/* Floating notification */}
-            <div className="absolute -top-4 -right-4 bg-red-500 text-white p-3 rounded-lg shadow-lg animate-bounce">
-              <div className="text-xs font-semibold">🚨 Scadenza!</div>
-              <div className="text-xs">Assicurazione tra 7 giorni</div>
-            </div>
-            
-            {/* Background decoration */}
-            <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-gradient-to-br from-green-400 to-blue-500 rounded-full opacity-20 blur-xl"></div>
           </div>
         </div>
       </div>

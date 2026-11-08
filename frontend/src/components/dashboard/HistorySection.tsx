@@ -168,7 +168,7 @@ export const HistorySection: React.FC<Props> = ({ vehicles }) => {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-gray-900">Storico interventi e pagamenti</h2>
       </div>
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+      <div className="bg-surface shadow-sm rounded-lg overflow-hidden">
         {loading ? (
           <div className="p-6 text-gray-600">Caricamento storico...</div>
         ) : error ? (
@@ -188,7 +188,7 @@ export const HistorySection: React.FC<Props> = ({ vehicles }) => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Costo</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-surface divide-y divide-gray-200">
                 {records.slice(0, 50).map((rec) => {
                   const v = vehicles.find(v => String(v.id) === String(rec.vehicleId));
                   return (

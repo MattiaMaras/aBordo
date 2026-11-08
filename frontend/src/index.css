@@ -1,3 +1,74 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ===== Base tema scuro ===== */
+:root {
+  color-scheme: dark;
+  --accent: #BEF23C;
+  --on-accent: #0A0C10;
+}
+
+html { background: #0A0C10; }
+body {
+  background: #0A0C10;
+  color: #F0F3F8;
+  font-family: Geist, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* alone d'accento molto tenue in alto: profondità senza decorazione */
+  background-image: radial-gradient(900px 400px at 50% -120px, rgba(190, 242, 60, 0.06), transparent 70%);
+  background-repeat: no-repeat;
+}
+::selection { background: rgba(190, 242, 60, 0.3); color: #fff; }
+
+/* Campi: i browser li disegnano bianchi di default */
+input, select, textarea {
+  background-color: #0F131A;
+  color: #F0F3F8;
+  border-color: #2F3846;
+}
+input::placeholder, textarea::placeholder { color: #7B869A; }
+input:focus, select:focus, textarea:focus { border-color: rgba(190, 242, 60, 0.6); }
+input[type="checkbox"] { accent-color: #BEF23C; background-color: #0F131A; }
+option { background: #12161D; color: #F0F3F8; }
+
+/* Testo su fondi d'accento: scuro, non bianco */
+.bg-blue-500, .bg-blue-600, .bg-blue-700 { color: var(--on-accent); }
+.bg-blue-600 svg, .bg-blue-700 svg, .bg-blue-500 svg { color: inherit; }
+
+/* Scrollbar discreta */
+* { scrollbar-width: thin; scrollbar-color: #2F3846 transparent; }
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Modali: entrata 160-200ms, mai da scale(0), origine centrata (non ancorate a un trigger) */
+@keyframes modal-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-backdrop { animation: modal-backdrop-in 160ms ease-out; }
+.modal-panel { animation: modal-panel-in 200ms var(--ease-out); }
+
+/* Wizard: i passi scorrono nella direzione di navigazione */
+@keyframes wizard-step-forward {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes wizard-step-back {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.wizard-step-forward { animation: wizard-step-forward 200ms var(--ease-out); }
+.wizard-step-back { animation: wizard-step-back 200ms var(--ease-out); }
+
+/* Progress: solo transform (scaleX), niente animazione di width */
+.wizard-progress { transform-origin: left; transition: transform 220ms var(--ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-panel, .wizard-step-forward, .wizard-step-back { animation: modal-backdrop-in 120ms ease-out; }
+  .wizard-progress { transition: none; }
+}

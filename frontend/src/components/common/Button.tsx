@@ -20,7 +20,7 @@ export const Button: React.FC<ButtonProps> = ({
       case 'secondary':
         return 'bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500';
       case 'outline':
-        return 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50 focus:ring-blue-500';
+        return 'border-gray-300 text-gray-700 bg-surface hover:bg-gray-50 focus:ring-blue-500';
       case 'danger':
         return 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500';
       default:
@@ -43,7 +43,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={`inline-flex items-center justify-center font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed border ${getVariantClasses()} ${getSizeClasses()} ${className}`}
+      className={`inline-flex items-center justify-center font-medium rounded-md transition-[color,background-color,border-color,transform] duration-150 active:scale-[0.97] focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed border ${getVariantClasses()} ${getSizeClasses()} ${className}`}
       {...props}
     >
       {children}

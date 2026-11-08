@@ -26,7 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-surface shadow-sm border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <button onClick={onLogoClick} className="flex items-center space-x-3 group" aria-label="A Bordo - Torna alla dashboard">
@@ -108,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               
               {/* Dropdown menu */}
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all duration-200">
+              <div className="absolute right-0 mt-2 w-48 bg-surface rounded-md shadow-lg py-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-all duration-200">
                 <div className="px-4 py-2 text-sm text-gray-700 border-b">
                   <div className="font-medium">{user?.firstName} {user?.lastName}</div>
                   <div className="text-gray-500">{user?.email}</div>

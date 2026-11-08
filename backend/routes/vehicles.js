@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
-const { validate, vehicleCreateSchema, vehicleUpdateSchema, maintenanceCreateSchema, maintenanceUpdateSchema } = require('../validation/schemas');
+const { validate, vehicleCreateSchema, vehicleUpdateSchema, maintenanceCreateSchema, maintenanceUpdateSchema, onboardingSchema } = require('../validation/schemas');
 
 const router = express.Router();
 
@@ -450,6 +450,124 @@ const recomputeOrDeleteNotification = async (vehicleId, type) => {
     await pool.query(`DELETE FROM notifications WHERE vehicle_id = $1 AND type = $2`, [vehicleId, type]);
   }
 };
+
+// Somma mesi a una data YYYY-MM-DD (UTC, nessuno shift di timezone)
+const addMonthsToDate = (dateStr, months) => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1 + months, d));
+  // Gestisce i fine mese (31 gen + 1 mese = 28/29 feb, non 3 mar)
+  if (dt.getUTCDate() !== d) dt.setUTCDate(0);
+  return dt.toISOString().slice(0, 10);
+};
+
+// ===== ONBOARDING: veicolo + ultimo dato noto di ogni intervento periodico =====
+// Tutto in UNA transazione: o viene creato tutto, o non viene creato nulla.
+// Usa solo tabelle/colonne esistenti: nessuna migrazione, nessun rischio per i dati.
+router.post('/onboard', validate(onboardingSchema), async (req, res) => {
+  const { vehicle, insurance, tax, inspection, service, tires, filters, extras } = req.body;
+  const userId = req.user.id;
+  const client = await pool.connect();
+  const notifications = []; // [type, expiryDate, opts]
+
+  try {
+    await client.query('BEGIN');
+
+    const v = (await client.query(
+      `INSERT INTO vehicles (user_id, plate_number, brand, model, year, current_mileage, fuel_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [userId, vehicle.plateNumber.toUpperCase(), vehicle.brand, vehicle.model, vehicle.year, vehicle.currentMileage, vehicle.fuelType]
+    )).rows[0];
+
+    const ins = (await client.query(
+      `INSERT INTO insurances (vehicle_id, company, policy_number, expiry_date, annual_premium)
+       VALUES ($1, $2, '', $3, $4) RETURNING id, expiry_date`,
+      [v.id, insurance.company, insurance.expiryDate, insurance.annualPremium ?? 0]
+    )).rows[0];
+    notifications.push(['insurance', ins.expiry_date, { sourceType: 'insurance', sourceId: ins.id }]);
+
+    const tx = (await client.query(
+      `INSERT INTO car_taxes (vehicle_id, expiry_date, amount, region, is_paid)
+       VALUES ($1, $2, $3, $4, true) RETURNING id, expiry_date`,
+      [v.id, tax.expiryDate, tax.amount ?? 0, tax.region]
+    )).rows[0];
+    notifications.push(['tax', tx.expiry_date, { sourceType: 'tax', sourceId: tx.id }]);
+
+    const nextInspection = addMonthsToDate(inspection.lastInspectionDate, 24);
+    const insp = (await client.query(
+      `INSERT INTO inspections (vehicle_id, last_inspection_date, next_inspection_date, inspection_center, cost)
+       VALUES ($1, $2, $3, $4, 0) RETURNING id, next_inspection_date`,
+      [v.id, inspection.lastInspectionDate, nextInspection, inspection.inspectionCenter || null]
+    )).rows[0];
+    notifications.push(['inspection', insp.next_inspection_date, { sourceType: 'inspection', sourceId: insp.id }]);
+
+    const interval = service.serviceInterval ?? 15000;
+    await client.query(
+      `INSERT INTO services (vehicle_id, last_service_mileage, last_service_date, service_interval, next_service_mileage, service_type)
+       VALUES ($1, $2, $3, $4, $5, 'regular')`,
+      [v.id, service.lastServiceMileage, service.lastServiceDate, interval, service.lastServiceMileage + interval]
+    );
+
+    // Manutenzioni periodiche: [tipo DB, titolo, ultima data, ultimi km, mesi al prossimo, km al prossimo]
+    const maintenancePlan = [
+      ['tires', 'Cambio/inversione gomme', tires.lastDate, null, 6, null],
+      ['filters', 'Filtri aria/abitacolo', filters.lastDate, null, 12, null],
+    ];
+    if (extras?.oilChange) {
+      const e = extras.oilChange;
+      maintenancePlan.push(['oil_change', 'Cambio olio', e.lastDate, e.lastMileage ?? null, e.lastMileage != null ? null : 12, e.lastMileage != null ? 15000 : null]);
+    }
+    if (extras?.brakes) maintenancePlan.push(['brakes', 'Controllo freni', extras.brakes.lastDate, extras.brakes.lastMileage ?? null, 24, null]);
+    // AdBlue predittivo: prossimo rabbocco stimato a km (consumo variabile, nessuna data fissa)
+    if (extras?.adblue) maintenancePlan.push(['adblue', 'Rabbocco AdBlue', extras.adblue.lastDate, extras.adblue.lastMileage, null, 10000]);
+    if (extras?.belts) maintenancePlan.push(['belts', 'Cinghia di distribuzione', extras.belts.lastDate, extras.belts.lastMileage ?? null, 60, null]);
+
+    for (const [dbType, title, lastDate, lastKm, months, kmInterval] of maintenancePlan) {
+      const nextDate = months != null ? addMonthsToDate(lastDate, months) : null;
+      const nextKm = kmInterval != null && lastKm != null ? lastKm + kmInterval : null;
+      const m = (await client.query(
+        `INSERT INTO maintenances (vehicle_id, type, title, last_maintenance, last_mileage, next_maintenance, next_mileage, cost)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 0) RETURNING id, next_maintenance`,
+        [v.id, dbType, title, lastDate, lastKm, nextDate, nextKm]
+      )).rows[0];
+      if (m.next_maintenance) {
+        notifications.push(['maintenance', m.next_maintenance, { maintenanceLabel: title, sourceType: 'maintenance', sourceId: m.id }]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Notifiche: best effort dopo il commit (come nelle altre route)
+    for (const [type, expiry, opts] of notifications) {
+      try { await upsertExpiryNotification(v.id, type, expiry, opts); }
+      catch (e) { console.error('Notifica onboarding non creata:', type, e); }
+    }
+
+    res.status(201).json({
+      message: 'Veicolo creato con tutte le scadenze iniziali',
+      vehicle: {
+        id: v.id.toString(),
+        plateNumber: v.plate_number,
+        brand: v.brand,
+        model: v.model,
+        year: v.year,
+        currentMileage: v.current_mileage,
+        fuelType: v.fuel_type,
+        createdAt: v.created_at,
+        updatedAt: v.updated_at,
+      },
+      createdRecords: maintenancePlan.length + 4,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Veicolo con questa targa già esistente' });
+    }
+    console.error('Errore onboarding veicolo:', error);
+    res.status(500).json({ error: 'Errore del server nella creazione del veicolo' });
+  } finally {
+    client.release();
+  }
+});
 
 // Mappa il tipo inviato dal client (può già essere un tipo DB, es. "belts" per "Altro")
 // sul tipo DB effettivo, e valida contro l'enum consentito dal CHECK constraint.

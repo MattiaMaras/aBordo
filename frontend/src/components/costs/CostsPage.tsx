@@ -204,7 +204,7 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
           <Button onClick={onBack}>Torna alla Dashboard</Button>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="bg-surface rounded-lg shadow p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Periodo</label>
@@ -253,29 +253,29 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-lg shadow p-4">
+              <div className="bg-surface rounded-lg shadow p-4">
                 <p className="text-sm text-gray-500">Totale</p>
                 <p className="text-2xl font-bold">€{total.toFixed(2)}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-4">
+              <div className="bg-surface rounded-lg shadow p-4">
                 <p className="text-sm text-gray-500">Manutenzioni</p>
                 <p className="text-2xl font-bold">€{totalsByCategory.maintenance.toFixed(2)}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-4">
+              <div className="bg-surface rounded-lg shadow p-4">
                 <p className="text-sm text-gray-500">Revisioni</p>
                 <p className="text-2xl font-bold">€{totalsByCategory.inspection.toFixed(2)}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-4">
+              <div className="bg-surface rounded-lg shadow p-4">
                 <p className="text-sm text-gray-500">Bolli</p>
                 <p className="text-2xl font-bold">€{totalsByCategory.tax.toFixed(2)}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-4 md:col-span-2">
+              <div className="bg-surface rounded-lg shadow p-4 md:col-span-2">
                 <p className="text-sm text-gray-500">Assicurazioni</p>
                 <p className="text-2xl font-bold">€{totalsByCategory.insurance.toFixed(2)}</p>
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="bg-surface rounded-lg shadow p-6 mb-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Distribuzione costi per categoria</h2>
               {summaryLoading ? (
                 <p className="text-gray-600">Caricamento riepilogo...</p>
@@ -303,7 +303,7 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
               )}
             </div>
 
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-surface rounded-lg shadow overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -314,7 +314,7 @@ export const CostsPage: React.FC<CostsPageProps> = ({ vehicles, onBack, refreshT
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dettagli</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-surface divide-y divide-gray-200">
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-6 py-4 text-center text-gray-500">Nessun costo nel periodo selezionato</td>

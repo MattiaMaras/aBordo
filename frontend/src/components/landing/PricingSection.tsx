@@ -33,7 +33,7 @@ export const PricingSection: React.FC<PricingSectionProps> = ({ onGetStarted }) 
 
         {/* Features Grid */}
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="bg-surface rounded-2xl shadow-xl p-8">
             <h3 className="text-2xl font-bold text-center text-gray-900 mb-8">
               Tutto incluso, sempre gratis
             </h3>
