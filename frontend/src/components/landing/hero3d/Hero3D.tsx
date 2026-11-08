@@ -28,12 +28,12 @@ type Tone = 'red' | 'amber' | 'green';
 
 // Dati dimostrativi (esempio): ogni capitolo punta a una parte dell'auto.
 const CHAPTERS: { id: string; title: string; text: string; example: string; tone: Tone }[] = [
-  { id: 'tagliando', title: 'Tagliando', text: 'A data e a chilometri. Ti avvisiamo quando mancano pochi km.', example: 'tra 2.340 km', tone: 'green' },
-  { id: 'revisione', title: 'Revisione', text: 'Inserisci l\'ultima: calcoliamo noi la prossima, due anni dopo.', example: 'tra 188 giorni', tone: 'green' },
+  { id: 'tagliando', title: 'Tagliando', text: 'Ti avvisiamo noi quando mancano pochi km.', example: 'tra 2.340 km', tone: 'green' },
+  { id: 'revisione', title: 'Revisione', text: 'Inserisci l\'ultima: calcoliamo noi la prossima, due anni dopo.', example: 'tra 190 giorni', tone: 'green' },
   { id: 'assicurazione', title: 'Assicurazione', text: 'Tre email: a 30 giorni, a 7 giorni e il giorno della scadenza.', example: 'tra 6 giorni', tone: 'red' },
-  { id: 'gomme', title: 'Gomme', text: 'Cambio stagionale e inversione, con il promemoria a sei mesi.', example: 'tra 19 giorni', tone: 'amber' },
+  { id: 'gomme', title: 'Gomme', text: 'Cambio stagionale e inversione, con il promemoria a sei mesi.', example: 'tra 20 giorni', tone: 'amber' },
   { id: 'freni', title: 'Freni', text: 'Pastiglie e dischi: l\'ultimo controllo resta nello storico, con i km.', example: 'ultimo a 62.000 km', tone: 'green' },
-  { id: 'adblue', title: 'AdBlue', text: 'Il consumo varia: avvisiamo a chilometri e ti chiediamo di aggiornarli.', example: 'tra 1.200 km', tone: 'amber' },
+  { id: 'adblue', title: 'AdBlue', text: 'Il consumo varia: avvisiamo in base ai chilometri e ti chiediamo di aggiornarli.', example: 'tra 1.200 km', tone: 'amber' },
 ];
 
 // Camera per ogni "tappa": 0 = apertura, 1..6 = capitoli, 7 = chiusura

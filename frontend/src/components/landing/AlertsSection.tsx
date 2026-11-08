@@ -39,7 +39,7 @@ export const AlertsSection: React.FC = () => (
           <p className="text-sm text-gray-600">A Bordo · Scadenza imminente</p>
         </div>
         <div className="p-6">
-          <p className="text-gray-900 font-medium mb-1">Ciao Mario,</p>
+          <p className="text-gray-900 font-medium mb-1">Ciao Ale,</p>
           <p className="text-sm text-gray-600 mb-5">sta per scadere un'importante scadenza per il tuo veicolo.</p>
           <dl className="rounded-xl border border-gray-200 bg-gray-50 divide-y divide-gray-200 text-sm">
             {[['Veicolo', 'Fiat Panda · QA123TS'], ['Scadenza', 'Assicurazione'], ['Data', '14/11/2026'], ['Giorni rimanenti', '7']].map(([k, v]) => (
